@@ -1,0 +1,57 @@
+SUBROUTINE sub_allocate_scalaire_vectoriel
+  Use m_mesh
+  Use m_gen
+  Use m_mat
+  Use m_inter
+
+  implicit none
+  allocate(A_pp(Nflu+Nflusol,Nphi,4*Nphi))
+  allocate(A_uxux(Nsol+Nsolflu,Nphi,4*Nphi))
+  allocate(A_uxuy(Nsol+Nsolflu,Nphi,4*Nphi))
+  allocate(A_uyux(Nsol+Nsolflu,Nphi,4*Nphi))
+  allocate(A_uyuy(Nsol+Nsolflu,Nphi,4*Nphi))
+  allocate(A_pux(Nflusol,Nphi,3*Nphi))
+  allocate(A_puy(Nflusol,Nphi,3*Nphi))
+  allocate(A_uxp(Nsolflu,Nphi,3*Nphi))
+  allocate(A_uyp(Nsolflu,Nphi,3*Nphi))
+  allocate(Corres_arete(Nflu+Nflusol,1+3*(1+order)))
+  allocate(Corres_arete_u(Nflu+Nflusol,1+3*Nphi))
+  allocate(Ux(Nphi*(Nsolflu+Nsol)))
+  allocate(Uy(Nphi*(Nsolflu+Nsol)))
+  allocate(P(Nphi*(Nflu+Nflusol)))
+  allocate(DFVec(Ntri))
+  A_pp=0.D0
+  A_uxux=0.D0
+  A_uxuy=0.D0
+  A_uyux=0.D0
+  A_uyuy=0.D0
+  A_pux=0.D0
+  A_puy=0.D0
+  A_uxp=0.D0
+  A_uyp=0.D0
+  Ux=0.D0
+  Uy=0.D0
+  P=0.D0
+  if (helmholtz.eq.0) then
+     allocate(Pold(Nphi*(Nflusol+Nflu)))
+     allocate(Pinter(Nphi*(Nflusol+Nflu)))
+     allocate(Uxold(Nphi*(Nsolflu+Nsol)))
+     allocate(Uxinter(Nphi*(Nsolflu+Nsol)))
+     allocate(Uyold(Nphi*(Nsolflu+Nsol)))
+     allocate(Uyinter(Nphi*(Nsolflu+Nsol)))
+     allocate(AP(Nphi*(Nflu+Nflusol)))
+     allocate(AUx(Nphi*(Nsol+Nsolflu)))
+     allocate(AUy(Nphi*(Nsol+Nsolflu)))
+     allocate(Corres_flusol(Nflusol))
+     allocate(Corres_solflu(Nsolflu))
+     AP=0.D0
+     AUx=0.D0
+     AUy=0.D0
+     Pold=0.D0
+     Pinter=0.D0
+     Uxold=0.D0
+     Uxinter=0.D0
+     Uyold=0.D0
+     Uyinter=0.D0
+  end if
+END SUBROUTINE sub_allocate_scalaire_vectoriel

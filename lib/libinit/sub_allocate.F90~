@@ -1,0 +1,23 @@
+SUBROUTINE sub_allocate
+  Use m_mesh
+  Use m_gen
+  Use m_mat
+  Use m_inter
+
+  implicit none
+  allocate(A(Ntri,Nphi,4*Nphi))
+  allocate(Corres_arete(Ntri,1+3*(1+order)))
+  allocate(Corres_arete_u(Ntri,1+3*Nphi))
+  allocate(U(Nphi*Ntri))
+  allocate(DFVec(Ntri))
+  A=0.D0
+  U=0.D0
+  if (helmholtz.eq.0) then
+     allocate(Uold(Nphi*Ntri))
+     allocate(Uinter(Nphi*Ntri))
+     allocate(AU(Nphi*Ntri))
+     AU=0.D0
+     Uold=0.D0
+     Uinter=0.D0
+  end if
+END SUBROUTINE sub_allocate

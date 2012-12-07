@@ -1,0 +1,31 @@
+SUBROUTINE coeff_deriv_frac
+
+!! Dans cette fonction, on calcule les coefficients présents dans l'approximation de la dérivée fractionnaire
+!! ATTENTION : ici, les coeff sont numérotés de 1 à Narete_du_bord alors que dans les articles ca commence à 0
+  Use m_condbord    
+  Use m_mat
+  Use m_gen
+  Use m_mesh
+  Use m_output
+  Use m_source
+  Use m_inter
+ ! Use m_rampant
+
+!! La déclaration
+IMPLICIT NONE
+  INTEGER :: I
+
+!! A priori, on a besoin d'autant de coeff que d'aretes sur le bord
+allocate(coeff_der_frac(nombre_noeuds_DF+2))
+coeff_der_frac=0.D0
+!write(6,*) size(coeff_der_frac)
+!! le premier coeff est égal à 1
+coeff_der_frac(1)=1.D0
+
+!! On fait une boucle pour stocker tous les coeff
+DO I=2,10
+	coeff_der_frac(I)=-coeff_der_frac(I-1)*(2.D0/3.D0-I+2.D0)/(I-1.D0)
+END DO
+!write(6,*) coeff_der_frac
+!stop
+END SUBROUTINE coeff_deriv_frac

@@ -1,0 +1,163 @@
+SUBROUTINE sub_writeunstruct
+  Use m_mesh
+  Use m_output
+  Use m_condbord
+  Use m_gen
+  Use m_mat
+  implicit none
+  INTEGER :: I,J,K
+  character*100 :: nam
+  real*8 :: Ecrit(Nphi)
+  real*8 :: DF,V12(2),V23(2),V31(2),x,y,N(2,2),Node2(2),JJ
+  integer :: Node(3),Ncells,Nnodes
+  real*8 ::Ecritbis,h5
+  write(nam,*) NbInst
+  if (Nbinst.le.9) then
+     nam="000"//trim(adjustl(nam))
+  elseif (Nbinst.le.99) then
+     nam="00"//trim(adjustl(nam))
+  elseif (Nbinst.le.999) then
+     nam="0"//trim(adjustl(nam))
+  end if
+  If (Order.eq.3) then
+     Ncells=9*Ntri
+     Nnodes=Nphi*Ntri
+     else
+        Ncells=Ntri
+        Nnodes=3*Ntri
+     Endif
+  open(20,FILE="FILM/test3."//trim(nam)//".vtu")
+   write(20,FMT='(A21)')'<?xml version="1.0"?>' 
+   write(20,*) '<VTKFile type="UnstructuredGrid">' 
+   write(20,*) '<UnstructuredGrid>' 
+   write(20,*) '<Piece NumberOfPoints="',Nnodes,'" NumberOfCells="',Ncells,'">'
+   write(20,*) '<Points>'
+write(20,*) '<DataArray type="Float64" Name="Position" NumberOfComponents="3" format="ascii">'
+DO I=1,NTri
+   DO J=1,3
+      write(20,*) Coor(Tri(I,J),1),Coor(Tri(I,J),2), 0
+   END DO
+   IF (Order.eq.3) then
+      Node = Tri(I,:)
+      V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+      V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+      V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+      V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+      V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+      V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+      DO K=1,Order-1
+         x=Coor(Tri(I,1),1)+K*V12(1)/Order
+         y=Coor(Tri(I,1),2)+K*V12(2)/Order
+         write(20,*) x,y, 0
+      ENDDO
+      DO K=1,Order-1
+         x=Coor(Tri(I,2),1)+K*V23(1)/Order
+         y=Coor(Tri(I,2),2)+K*V23(2)/Order
+         write(20,*) x,y, 0
+      ENDDO
+      DO K=1,Order-1
+         x=Coor(Tri(I,3),1)+K*V31(1)/Order
+         y=Coor(Tri(I,3),2)+K*V31(2)/Order
+         write(20,*) x,y, 0
+      ENDDO
+      x=Coor(Tri(I,1),1)+V12(1)/3.-V31(1)/3.
+      y=Coor(Tri(I,1),2)+V12(2)/3.-V31(2)/3.
+         write(20,*) x,y, 0
+   ENDIF
+ENDDO
+   write(20,*) '</DataArray>'
+   write(20,*) '</Points>'
+   write(20,*) '<Cells>'
+   write(20,*) '<DataArray type="Int32" Name="connectivity"   format="ascii">'
+IF (Order.eq.3) then
+   DO I=1,NTri
+      write(20,*) Nphi*(I-1), Nphi*(I-1)+3,Nphi*(I-1)+8
+      write(20,*) Nphi*(I-1)+3, Nphi*(I-1)+9,Nphi*(I-1)+8
+      write(20,*) Nphi*(I-1)+3,Nphi*(I-1)+4,Nphi*(I-1)+9
+      write(20,*) Nphi*(I-1)+4,Nphi*(I-1)+5,Nphi*(I-1)+9
+      write(20,*) Nphi*(I-1)+4,Nphi*(I-1)+1,Nphi*(I-1)+5
+      write(20,*) Nphi*(I-1)+8,Nphi*(I-1)+9,Nphi*(I-1)+7
+      write(20,*) Nphi*(I-1)+9,Nphi*(I-1)+6,Nphi*(I-1)+7
+      write(20,*) Nphi*(I-1)+9,Nphi*(I-1)+5,Nphi*(I-1)+6
+      write(20,*) Nphi*(I-1)+7,Nphi*(I-1)+6,Nphi*(I-1)+2
+   END DO
+ELSE
+   DO I=1,NTri
+      write(20,*) Nphi*(I-1), Nphi*(I-1)+1,Nphi*(I-1)+2
+   END DO
+END IF
+   write(20,*)'</DataArray>'
+   write(20,*)'<DataArray type="Int32" Name="offsets"  format="ascii">'
+IF (Order.eq.3) then
+   DO I=1,NTri
+      write(20,*) 27*(I-1)+3, 27*(I-1)+6, 27*(I-1)+9, 27*(I-1)+12, 27*(I-1)+15, 27*(I-1)+18, 27*(I-1)+21, 27*(I-1)+24, 27*(I-1)+27
+   END DO
+else
+   DO I=1,NTri
+     write(20,*) 3*I
+   END DO
+ENDIF
+   write(20,*)'</DataArray>'
+   write(20,*)' <DataArray type="UInt8"  Name="types"  format="ascii">'
+IF (Order.eq.3) then
+   DO I=1,NTri
+      write(20,*) 5,5,5,5,5,5,5,5,5
+   END DO
+ELSE
+   DO I=1,NTri
+      write(20,*) 5
+   END DO
+ENDIF
+   write(20,*)'</DataArray>'
+   write(20,*) '</Cells>'
+   write(20,*) '<PointData Scalars="V">'
+   write(20,*) '<DataArray type="Float64" Name="V" format="ascii">'
+IF (Order.eq.3) then
+   DO I=1,Ntri
+      Ecrit=U((I-1)*Nphi+1:I*Nphi)
+      DO J=1,Nphi
+      write(20,*) Ecrit(J)
+   END DO
+   END DO
+else
+   DO I=1,Ntri
+      Ecrit=U((I-1)*Nphi+1:I*Nphi)
+      DO J=1,3
+      write(20,*) Ecrit(J)
+   END DO
+   END DO
+endif
+   write(20,*) '</DataArray>'
+   write(20,*) '</PointData>'
+  write(20,*) '</Piece>'
+   write(20,*) '</UnstructuredGrid>' 
+   write(20,*) '</VTKFile>' 
+ close(20)
+
+!  open(22,FILE="FILM/phi1_"//trim(nam)//".dat")
+!DO I=1,Narete_du_bord
+!   Node2 = Arete_du_bord(I,:)
+!   N(1,1)=Coor(Node2(1),1)
+!   N(1,2)=Coor(Node2(1),2)
+!   N(2,1)=Coor(Node2(2),1)
+!   N(2,2)=Coor(Node2(2),2)
+!   h5=sqrt((N(2,1)-N(1,1))**2+(N(2,2)-N(1,2))**2)
+!   
+!   DO J=1,1+order
+!     JJ=N(1,1)+(j-1)*h5/3
+!    ! write(6,*) N(1,1)
+!    ! write(6,*) (j-1)*h5/3
+!    ! Write(6,*) JJ
+!    ! stop 
+!     Ecritbis=phi1((I-1)*(1+order)+J)
+!
+!     write(22,*) JJ,Ecritbis
+! 
+!
+!      enddo
+!
+!END DO
+!
+!  close(22)
+     
+END SUBROUTINE sub_writeunstruct

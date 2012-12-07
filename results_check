@@ -1,0 +1,5 @@
+#!/bin/bash
+
+mv FILM/test3.0030.vtu ./test.0
+more +200000 test.0 | head -n 2
+echo " "

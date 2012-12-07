@@ -1,0 +1,1119 @@
+!!http://people.sc.fsu.edu/~jburkardt/f_src/specfun/specfun.f90
+
+subroutine elastoacoustic_analytic_courbe2(k,kp,ks,R0,R1,Nsomme,PhiEdge)
+  Use m_condbord    
+  Use m_mat
+  Use m_mesh
+  Use m_gen
+  implicit none
+  !Pour Mumps
+  !Fin pour mumps
+  real*8 :: somme,k,kp,ks,R0,R1,coor_x,coor_y,r,theta,V12(2),V23(2),V31(2),gamma13,gamma23,theta0,condi,condi1,res
+  integer :: i,l, Nsomme, NCALC,int_j,KK,type_cla,j,N, Iloc,lp,ls,nsomme2,nsomme3
+  real*8,dimension(:),allocatable :: J0,Y0,J1,Y1,J0p,Y0p,J1p,Y1p,J0s,Y0s,J1s,Y1s,Jr,Yr,Jrp,Jrs
+  complex*16,dimension(:),allocatable :: Hankel0,Hankel1,coeffA,coeffB,coeffC,coeffD, rhssystcoeff,coeff
+  complex*16,dimension(:,:),allocatable :: matsystcoeff,matsystcoeffinv
+
+  complex*16 :: tmp,c,d,dd,alphab,betab,ur,utheta,pr
+  INTEGER :: PhiEdge(3,Order+1),Node(3)
+
+  INTEGER ::Lwork,INFO,IPIV(4)
+  real *8 :: WORK
+  real*8 :: theta1,theta2,dtheta,pi
+pi=2.q0*asin(1.q0)
+	nsomme2=nsomme 
+nsomme2=nsomme
+nsomme3=nsomme
+write(6,*) 'heho',nsomme,nsomme2
+  N=4
+!!$  id%SYM = 0
+!!$  id%PAR = 1
+!!$  id%JOB = -1
+!!$  id%icntl(4)=4
+!!$  id%comm=MPI_COMM_WORLD
+!!$  CALL ZMUMPS(id)
+!!$  !fin pour mumps
+!!$  IF ( id%MYID .eq. 0 ) THEN
+!!$     id%N = N
+!!$     id%NZ = N**2
+!!$     ALLOCATE( id%IRN ( id%NZ ) )
+!!$     ALLOCATE( id%JCN ( id%NZ ) )
+!!$     ALLOCATE( id%A( id%NZ ) )
+!!$     ALLOCATE( id%RHS ( id%N ) )
+!!$  END IF
+
+  allocate(J0(Nsomme+2))
+  allocate(Y0(Nsomme+2))
+  allocate(J0p(Nsomme+2))
+  allocate(J0s(Nsomme+2))
+  allocate(Hankel0(Nsomme+2))
+  allocate(J1(Nsomme+2))
+  allocate(Y1(Nsomme+2))
+  allocate(Hankel1(Nsomme+2))
+
+  allocate(Jr(Nsomme+2))
+  allocate(Yr(Nsomme+2))
+  allocate(Jrp(Nsomme+2))
+  allocate(Jrs(Nsomme+2))
+
+  allocate(coeffA(Nsomme+1))
+  allocate(coeffB(Nsomme+1))
+  allocate(coeffC(Nsomme+1))
+  allocate(coeffD(Nsomme+1))
+  allocate(matsystcoeff(N,N))
+  allocate(rhssystcoeff(N))
+
+  NCALC=0
+
+  call RJBESL(k*R0,0.D0,Nsomme+2,J0,NCALC)	
+  call RYBESL(k*R0,0.D0,Nsomme+2,Y0,NCALC)
+
+!!$  write(6,*) 'kR0', k*R0
+!!$  write(6,*) 'Bessel', J0(1), Y0(1), J0(2), Y0(2), J0(5), Y0(5)
+
+  Hankel0 = cmplx(J0,Y0)
+
+  call RJBESL(kp*R0,0.D0,Nsomme+2,J0p,NCALC)	
+  call RJBESL(ks*R0,0.D0,Nsomme+2,J0s,NCALC)	
+
+
+  call RJBESL(k*R1,0.D0,Nsomme+2,J1,NCALC)	
+  call RYBESL(k*R1,0.D0,Nsomme+2,Y1,NCALC)
+
+  Hankel1 = cmplx(J1,Y1)
+
+  coeffA=0Q0
+  coeffB=0Q0
+  coeffC=0Q0
+  coeffD=0Q0
+
+  condi=1!omega**2!1Q0/(omega**2*rho(1)/k)
+	condi1=1!1e-13
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !! Calcul des coefficients 
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  DO i=1,Nsomme+1
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!! Matrice du système
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+     matsystcoeff(1,1) =(k*((i-1)/(k*R0)*Hankel0(i)-Hankel0(i+1)))
+     matsystcoeff(1,2) = (k*((i-1)/(k*R0)*conjg(Hankel0(i))-conjg(Hankel0(i+1))))
+     matsystcoeff(1,3) = -omega**2*rho(1)/R0*((i-1)*J0p(i)-kp*R0*J0p(i+1))
+     matsystcoeff(1,4) = -omega**2*rho(1)/R0*(i-1)*J0s(i)
+     matsystcoeff(2,1) = (k*((i-1)/(k*R1)*Hankel1(i)-Hankel1(i+1)) - cmplx(0,1)*k*Hankel1(i))
+     matsystcoeff(2,2) =(k*((i-1)/(k*R1)&
+          &*conjg(Hankel1(i))-conjg(Hankel1(i+1))) - cmplx(0,1)*k*conjg(Hankel1(i)))
+!!$    matsystcoeff(2,1) = k*((i-1)/(k*R1)*Hankel1(i)-Hankel1(i+1))
+!!$     matsystcoeff(2,2) =k*((i-1)/(k*R1)&
+!!$          &*conjg(Hankel1(i))-conjg(Hankel1(i+1)))
+     matsystcoeff(2,3) = 0.q0
+     matsystcoeff(2,4) = 0.q0
+     matsystcoeff(3,1) = (Hankel0(i))
+     matsystcoeff(3,2) = (conjg(Hankel0(i)))
+     matsystcoeff(3,3) = 2.q0*Cij(1,3,3)/(R0**2)*(((i-1)**2+(i-1)-1/2.q0*ks**2*R0**2)*J0p(i)-& 
+          & kp*R0*(2.q0*(i-1)/(kp*R0)*J0p(i)-J0p(i+1)))
+     matsystcoeff(3,4) = 2.q0*Cij(1,3,3)/(R0**2)*((i-1)*(-i*J0s(i)+ks*R0*(2.q0*(i-1)/(ks*R0)*J0s(i)-J0s(i+1))))
+     matsystcoeff(4,1) = 0.q0
+     matsystcoeff(4,2) = 0.q0
+     matsystcoeff(4,3) = 2.q0*Cij(1,3,3)/(R0**2)*(-(i-1)*(-i*J0p(i)+&
+&kp*R0*(2q0*(i-1)/(kp*R0)*J0p(i)-J0p(i+1))))
+     matsystcoeff(4,4) = 2.q0*Cij(1,3,3)/(R0**2)*(-((i-1)**2+(i-1)-&
+&1/2.q0*ks**2*R0**2)*J0s(i)+ks*R0*(2.q0*(i-1)/(ks*R0)*J0s(i)-J0s(i+1)))
+
+!!!!!!!!!!!!!!!!!!!!!!!!!! 
+!!! Second membre du système
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+     if (i==1) then
+        rhssystcoeff(1) = (-k*(cmplx(0,1))**(i-1)*((i-1)/(k*R0)*J0(i)-J0(i+1)))
+        rhssystcoeff(3) = (-(cmplx(0,1))**(i-1)*J0(i))
+     else
+        rhssystcoeff(1) = (-2*k*(cmplx(0,1))**(i-1)*((i-1)/(k*R0)*J0(i)-J0(i+1)))
+        rhssystcoeff(3) = (-2*(cmplx(0,1))**(i-1)*J0(i))
+     endif
+
+     rhssystcoeff(2) = 0.q0
+     rhssystcoeff(4) = 0.q0
+
+     matsystcoeff(3:4,3:4)=condi1*matsystcoeff(3:4,3:4)
+     matsystcoeff(1:2,1:2)=matsystcoeff(1:2,1:2)/condi1/condi
+     matsystcoeff(1:2,3:4)=matsystcoeff(1:2,3:4)/condi
+!     matsystcoeff(:,4)=condi*matsystcoeff(:,4)
+rhssystcoeff(1:2)=rhssystcoeff(1:2)/condi/condi1
+
+     call ZGESV( 4, 1, matsystcoeff, 4, IPIV, rhssystcoeff, 4, INFO )
+     coeffA(i)=rhssystcoeff(1)
+     coeffB(i)=rhssystcoeff(2)
+     coeffC(i)=condi1*rhssystcoeff(3)
+     coeffD(i)=condi1*rhssystcoeff(4)
+!!$!!! Résolution du système avec Mumps
+
+!!$     Iloc=0
+!!$     id%RHS(1:N)=rhssystcoeff(1:N)
+!!$     DO j=1,N
+!!$        DO l=1,N
+!!$           Iloc=Iloc+1
+!!$           id%IRN(Iloc)=j
+!!$           id%JCN(Iloc)=l
+!!$           id%A(Iloc)=matsystcoeff(j,l)
+!!$        ENDDO
+!!$     ENDDO
+!!$     id%JOB = 6
+!!$     CALL ZMUMPS(id)
+
+!!$    write(6,*)'rhs', rhssystcoeff
+
+!!$     coeffA(i)=id%rhs(1)
+!!$     coeffB(i)=id%rhs(2)
+!!$     coeffC(i)=id%rhs(3)
+!!$     coeffD(i)=id%rhs(4)
+
+!!$     write(6,*) 'mat', matmul(matsystcoeff,rhssystcoeff)
+!!$if(i.eq.1) then
+!!$write(6,*) 'i', i
+!!$write(6,*) 'coeffA', coeffA(i)
+!!$write(6,*) 'coeffB', coeffB(i)
+!!$write(6,*) 'coeffC', coeffC(i)
+!!$write(6,*) 'coeffD', coeffD(i)
+!!$else
+!!$write(6,*) 'i', i
+!!$write(6,*) 'coeffA', coeffA(i),abs((coeffA(i)-coeffA(i-1))/coeffA(i-1))
+!!$write(6,*) 'coeffB', coeffB(i),abs((coeffB(i)-coeffB(i-1))/coeffB(i-1))
+!!$write(6,*) 'coeffC', coeffC(i),abs((coeffC(i)-coeffC(i-1))/coeffC(i-1))
+!!$write(6,*) 'coeffD', coeffD(i),abs((coeffD(i)-coeffD(i-1))/coeffD(i-1))
+!!$endif
+  ENDDO
+
+  P_analytic=0.q0
+  Ux_analytic=0.q0
+  Uy_analytic=0.q0
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de la solution exacte p 
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+        res=10.Q0
+        l=1
+
+  Do J=1,Nflu+Nflusol
+ ! Do J=Nflu,Nflu+Nflusol
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de la solution exacte p aux ddl d'ordre 1
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+     DO int_j=1,3
+        coor_x =sqrt(2Q0)/2Q0*0.01Q0! Coor(Tri(J,int_j),1)
+        coor_y =sqrt(2Q0)/2Q0*0.01Q0! Coor(Tri(J,int_j),2)
+        coor_x =Coor(Tri(J,int_j),1)
+        coor_y =Coor(Tri(J,int_j),2)
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+           P_analytic((J-1)*Nphi+int_j)=P_analytic((J-1)*Nphi+int_j)+pr
+
+     enddo
+
+     SELECT CASE(Order)
+
+     CASE(2)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de l'onde p en ajoutant les ddl de l'ordre 2
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        Node = Tri(J,:)
+
+        !!Computation of vectors V12,V23 and V31
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/Order
+        coor_y=Coor(Tri(J,1),2)+V12(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+PhiEdge(3,2))=P_analytic((J-1)*Nphi+PhiEdge(3,2))+pr
+
+        coor_x=Coor(Tri(J,2),1)+V23(1)/Order
+        coor_y=Coor(Tri(J,2),2)+V23(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+PhiEdge(1,2))=P_analytic((J-1)*Nphi+PhiEdge(1,2))+pr
+
+        coor_x=Coor(Tri(J,3),1)+V31(1)/Order
+        coor_y=Coor(Tri(J,3),2)+V31(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+PhiEdge(2,2))=P_analytic((J-1)*Nphi+PhiEdge(2,2))+pr
+
+
+     CASE(3)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de l'onde p en ajoutant les ddl de l'ordre 3 supplémentaires à l'ordre 1
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+        if((neigh(J,3).gt.nflu+nflusol).or.(neigh(J,3).le.0)) then 
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta1)
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if((neigh(J,3).le.nflu+nflusol).and.(neigh(J,3).gt.0)) then 
+           coor_x=Coor(Tri(J,1),1)+KK*V12(1)/Order
+           coor_y=Coor(Tri(J,1),2)+KK*V12(2)/Order
+           elseif (neigh(J,3).gt.nflu+nflusol) then
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           else
+              coor_x=R1*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R1*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+           call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+           call calc_theta(coor_x,coor_y,theta)
+
+           pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+                &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+              P_analytic((J-1)*Nphi+PhiEdge(3,KK+1))=P_analytic((J-1)*Nphi+PhiEdge(3,KK+1))+pr
+
+        ENDDO
+
+           if((neigh(J,1).gt.nflu+nflusol).or.(neigh(J,1).le.0)) then 
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta1)
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if((neigh(J,1).le.nflu+nflusol).and.(neigh(J,1).gt.0)) then 
+           coor_x=Coor(Tri(J,2),1)+KK*V23(1)/Order
+           coor_y=Coor(Tri(J,2),2)+KK*V23(2)/Order
+          elseif (neigh(J,1).gt.nflu+nflusol) then
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           else
+              coor_x=R1*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R1*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+           call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+           call calc_theta(coor_x,coor_y,theta)
+
+           pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+                &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+              P_analytic((J-1)*Nphi+PhiEdge(1,KK+1))=P_analytic((J-1)*Nphi+PhiEdge(1,KK+1))+pr
+
+        ENDDO
+           if((neigh(J,2).gt.nflu+nflusol).or.(neigh(J,2).le.0)) then 
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta1)
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if((neigh(J,2).le.nflu+nflusol).and.(neigh(J,2).gt.0)) then 
+           coor_x=Coor(Tri(J,3),1)+KK*V31(1)/Order
+           coor_y=Coor(Tri(J,3),2)+KK*V31(2)/Order
+        elseif (neigh(J,2).gt.nflu+nflusol) then
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+else
+              coor_x=R1*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R1*sin(theta1+kk*dtheta/real(order,16))
+        end if
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+           call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+           call calc_theta(coor_x,coor_y,theta)
+
+           pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+                &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+              P_analytic((J-1)*Nphi+PhiEdge(2,KK+1))=P_analytic((J-1)*Nphi+PhiEdge(2,KK+1))+pr
+
+
+        ENDDO
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/3.-V31(1)/3.
+        coor_y=Coor(Tri(J,1),2)+V12(2)/3.-V31(2)/3.
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+Nphi)=P_analytic((J-1)*Nphi+Nphi)+pr
+
+
+        ENDSELECT
+
+     enddo
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de u exact
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  Do J=Nflu+Nflusol+1,Nflu+Nflusol+Nsolflu+Nsol
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de u exact aux ddl d'ordre 1
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+     I=((J-1)-Nflu-Nflusol)*Nphi
+     DO int_j=1,3
+
+        coor_x = Coor(Tri(J,int_j),1)
+        coor_y = Coor(Tri(J,int_j),2)
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I+int_j) =Ux_analytic(I+int_j)+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I+int_j) =Uy_analytic(I+int_j)+ur*sin(theta)+utheta*cos(theta)
+        enddo
+     SELECT CASE(Order)
+     CASE(2)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de u aux ddl d'ordre 2
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+        I=((J-1)-Nflu-Nflusol)*Nphi  
+
+        Node = Tri(J,:)
+
+        !!Computation of vectors V12,V23 and V31
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/Order
+        coor_y=Coor(Tri(J,1),2)+V12(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I+PhiEdge(3,2)) =Ux_analytic(I+PhiEdge(3,2))+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I+PhiEdge(3,2)) =Uy_analytic(I+PhiEdge(3,2))+ur*sin(theta)+utheta*cos(theta)
+
+        coor_x=Coor(Tri(J,2),1)+V23(1)/Order
+        coor_y=Coor(Tri(J,2),2)+V23(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I+PhiEdge(1,2)) =Ux_analytic(I+PhiEdge(1,2))+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I+PhiEdge(1,2)) =Uy_analytic(I+PhiEdge(1,2))+ur*sin(theta)+utheta*cos(theta)
+
+        coor_x=Coor(Tri(J,3),1)+V31(1)/Order
+        coor_y=Coor(Tri(J,3),2)+V31(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I+PhiEdge(2,2)) =Ux_analytic(I+PhiEdge(2,2))+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I+PhiEdge(2,2)) =Uy_analytic(I+PhiEdge(2,2))+ur*sin(theta)+utheta*cos(theta)
+
+
+     CASE(3)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!! Calcul de u aux ddl d'ordre 3
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+        if(neigh(J,3).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta1)
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if(neigh(J,3).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,1),1)+KK*V12(1)/Order
+           coor_y=Coor(Tri(J,1),2)+KK*V12(2)/Order
+           else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(3,KK+1)
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+           call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+           call calc_theta(coor_x,coor_y,theta)
+
+           ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+           utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+              Ux_analytic(I) =Ux_analytic(I)+ur*cos(theta)-utheta*sin(theta)
+
+              Uy_analytic(I) =Uy_analytic(I)+ur*sin(theta)+utheta*cos(theta)
+
+
+        ENDDO
+        if(neigh(J,1).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta1)
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+
+          if(neigh(J,1).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,2),1)+KK*V23(1)/Order
+           coor_y=Coor(Tri(J,2),2)+KK*V23(2)/Order
+          else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(1,KK+1)
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+           call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+           call calc_theta(coor_x,coor_y,theta)
+
+           ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+           utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+              Ux_analytic(I) =Ux_analytic(I)+ur*cos(theta)-utheta*sin(theta)
+
+              Uy_analytic(I) =Uy_analytic(I)+ur*sin(theta)+utheta*cos(theta)
+
+        ENDDO
+        if(neigh(J,2).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta1)
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if(neigh(J,2).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,3),1)+KK*V31(1)/Order
+           coor_y=Coor(Tri(J,3),2)+KK*V31(2)/Order
+        else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+        end if
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(2,KK+1)
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+           call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+           call calc_theta(coor_x,coor_y,theta)
+
+           ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+           utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+              Ux_analytic(I) =Ux_analytic(I)+ur*cos(theta)-utheta*sin(theta)
+
+              Uy_analytic(I) =Uy_analytic(I)+ur*sin(theta)+utheta*cos(theta)
+
+
+        ENDDO
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+Nphi
+        coor_x=Coor(Tri(J,1),1)+V12(1)/3.-V31(1)/3.
+        coor_y=Coor(Tri(J,1),2)+V12(2)/3.-V31(2)/3.
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I) =Ux_analytic(I)+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I) =Uy_analytic(I)+ur*sin(theta)+utheta*cos(theta)
+
+     ENDSELECT
+
+  enddo
+
+
+res=10Q0
+!toto
+  do while (res.gt.1Q-10.and.(l.lt.Nsomme3+1)) 
+res=0Q0
+           l=l+1
+  Do J=1,Nflu+Nflusol
+ ! Do J=Nflu,Nflu+Nflusol
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de la solution exacte p aux ddl d'ordre 1
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+     DO int_j=1,3
+        coor_x =sqrt(2Q0)/2Q0*0.01Q0! Coor(Tri(J,int_j),1)
+        coor_y =sqrt(2Q0)/2Q0*0.01Q0! Coor(Tri(J,int_j),2)
+        coor_x =Coor(Tri(J,int_j),1)
+        coor_y =Coor(Tri(J,int_j),2)
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+int_j)=P_analytic((J-1)*Nphi+int_j)+pr
+           res=max(res,abs(pr/P_analytic((J-1)*Nphi+int_j)))
+!           write(6,*)  res,l,coor_x,coor_y
+        enddo
+
+
+     SELECT CASE(Order)
+
+     CASE(2)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de l'onde p en ajoutant les ddl de l'ordre 2
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        Node = Tri(J,:)
+
+        !!Computation of vectors V12,V23 and V31
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/Order
+        coor_y=Coor(Tri(J,1),2)+V12(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+PhiEdge(3,2))=P_analytic((J-1)*Nphi+PhiEdge(3,2))+pr
+           res=max(res,abs(pr/P_analytic((J-1)*Nphi+PhiEdge(3,2))))
+     
+
+        coor_x=Coor(Tri(J,2),1)+V23(1)/Order
+        coor_y=Coor(Tri(J,2),2)+V23(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+PhiEdge(1,2))=P_analytic((J-1)*Nphi+PhiEdge(1,2))+pr
+           res=max(res,abs(pr/P_analytic((J-1)*Nphi+PhiEdge(1,2))))
+
+        coor_x=Coor(Tri(J,3),1)+V31(1)/Order
+        coor_y=Coor(Tri(J,3),2)+V31(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+PhiEdge(2,2))=P_analytic((J-1)*Nphi+PhiEdge(2,2))+pr
+           res=max(res,abs(pr/P_analytic((J-1)*Nphi+PhiEdge(2,2))))
+
+
+     CASE(3)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de l'onde p en ajoutant les ddl de l'ordre 3 supplémentaires à l'ordre 1
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+        if((neigh(J,3).gt.nflu+nflusol).or.(neigh(J,3).le.0)) then 
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta1)
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+
+        DO KK=1,Order-1
+            if((neigh(J,3).le.nflu+nflusol).and.(neigh(J,3).gt.0)) then 
+              coor_x=Coor(Tri(J,1),1)+KK*V12(1)/Order
+              coor_y=Coor(Tri(J,1),2)+KK*V12(2)/Order
+           elseif (neigh(J,3).gt.nflu+nflusol) then
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           else
+              coor_x=R1*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R1*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+           call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+           call calc_theta(coor_x,coor_y,theta)
+
+           pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+                &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+              P_analytic((J-1)*Nphi+PhiEdge(3,KK+1))=P_analytic((J-1)*Nphi+PhiEdge(3,KK+1))+pr
+              res=max(res,abs(pr/P_analytic((J-1)*Nphi+PhiEdge(3,KK+1))))
+
+        ENDDO
+
+
+           if((neigh(J,1).gt.nflu+nflusol).or.(neigh(J,1).le.0)) then 
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta1)
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if((neigh(J,1).le.nflu+nflusol).and.(neigh(J,1).gt.0)) then 
+              coor_x=Coor(Tri(J,2),1)+KK*V23(1)/Order
+              coor_y=Coor(Tri(J,2),2)+KK*V23(2)/Order
+          elseif (neigh(J,1).gt.nflu+nflusol) then
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           else
+              coor_x=R1*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R1*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+           call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+           call calc_theta(coor_x,coor_y,theta)
+
+           pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+                &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+              P_analytic((J-1)*Nphi+PhiEdge(1,KK+1))=P_analytic((J-1)*Nphi+PhiEdge(1,KK+1))+pr
+              res=max(res,abs(pr/P_analytic((J-1)*Nphi+PhiEdge(1,KK+1))))
+
+        ENDDO
+           if((neigh(J,2).gt.nflu+nflusol).or.(neigh(J,2).le.0)) then 
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta1)
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if((neigh(J,2).le.nflu+nflusol).and.(neigh(J,2).gt.0)) then 
+           coor_x=Coor(Tri(J,3),1)+KK*V31(1)/Order
+           coor_y=Coor(Tri(J,3),2)+KK*V31(2)/Order
+        elseif(neigh(J,2).gt.nflu+nflusol) then
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+else
+              coor_x=R1*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R1*sin(theta1+kk*dtheta/real(order,16))
+        end if
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+           call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+           call calc_theta(coor_x,coor_y,theta)
+
+           pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+                &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+              P_analytic((J-1)*Nphi+PhiEdge(2,KK+1))=P_analytic((J-1)*Nphi+PhiEdge(2,KK+1))+pr
+              res=max(res,abs(pr/P_analytic((J-1)*Nphi+PhiEdge(2,KK+1))))
+
+
+        ENDDO
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/3.-V31(1)/3.
+        coor_y=Coor(Tri(J,1),2)+V12(2)/3.-V31(2)/3.
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(k*r,0.Q0,Nsomme3+1,Jr,NCALC)	
+        call RYBESL(k*r,0.Q0,Nsomme3+1,Yr,NCALC)
+        call calc_theta(coor_x,coor_y,theta)
+
+        pr=(coeffA(l)*cmplx(Jr(l),Yr(l))+&
+             &coeffB(l)*cmplx(Jr(l),-Yr(l)))*cos((l-1)*theta)
+
+           P_analytic((J-1)*Nphi+Nphi)=P_analytic((J-1)*Nphi+Nphi)+pr
+           res=max(res,abs(pr/P_analytic((J-1)*Nphi+Nphi)))
+!!$write(6,*) l,res
+
+
+     ENDSELECT
+
+  enddo
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de u exact
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  Do J=Nflu+Nflusol+1,Nflu+Nflusol+Nsolflu+Nsol
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de u exact aux ddl d'ordre 1
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+     I=((J-1)-Nflu-Nflusol)*Nphi
+     DO int_j=1,3
+
+        coor_x = Coor(Tri(J,int_j),1)
+        coor_y = Coor(Tri(J,int_j),2)
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I+int_j) =Ux_analytic(I+int_j)+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I+int_j) =Uy_analytic(I+int_j)+ur*sin(theta)+utheta*cos(theta)
+           res=max(res,2*sqrt(abs(ur)**2+abs(utheta)**2)/&
+                &sqrt(abs(Ux_analytic(I+int_j))**2+&
+                &abs(Uy_analytic(I+int_j))**2))
+     enddo
+     SELECT CASE(Order)
+     CASE(2)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!Calcul de u aux ddl d'ordre 2
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+        I=((J-1)-Nflu-Nflusol)*Nphi  
+
+        Node = Tri(J,:)
+
+        !!Computation of vectors V12,V23 and V31
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/Order
+        coor_y=Coor(Tri(J,1),2)+V12(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I+PhiEdge(3,2)) =Ux_analytic(I+PhiEdge(3,2))+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I+PhiEdge(3,2)) =Uy_analytic(I+PhiEdge(3,2))+ur*sin(theta)+utheta*cos(theta)
+           res=max(res,2*sqrt(abs(ur)**2+abs(utheta)**2)/&
+                &sqrt(abs(Ux_analytic(I+PhiEdge(3,2)))**2+&
+                &abs(Uy_analytic(I+PhiEdge(3,2)))**2))
+
+        coor_x=Coor(Tri(J,2),1)+V23(1)/Order
+        coor_y=Coor(Tri(J,2),2)+V23(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I+PhiEdge(1,2)) =Ux_analytic(I+PhiEdge(1,2))+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I+PhiEdge(1,2)) =Uy_analytic(I+PhiEdge(1,2))+ur*sin(theta)+utheta*cos(theta)
+           res=max(res,2*sqrt(abs(ur)**2+abs(utheta)**2)/&
+                &sqrt(abs(Ux_analytic(I+PhiEdge(1,2)))**2+&
+                &abs(Uy_analytic(I+PhiEdge(1,2)))**2))
+
+        coor_x=Coor(Tri(J,3),1)+V31(1)/Order
+        coor_y=Coor(Tri(J,3),2)+V31(2)/Order
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I+PhiEdge(2,2)) =Ux_analytic(I+PhiEdge(2,2))+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I+PhiEdge(2,2)) =Uy_analytic(I+PhiEdge(2,2))+ur*sin(theta)+utheta*cos(theta)
+           res=max(res,2*sqrt(abs(ur)**2+abs(utheta)**2)/&
+                &sqrt(abs(Ux_analytic(I+PhiEdge(2,2)))**2+&
+                &abs(Uy_analytic(I+PhiEdge(2,2)))**2))
+
+
+     CASE(3)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!! Calcul de u aux ddl d'ordre 3
+!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+        if(neigh(J,3).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta1)
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if(neigh(J,3).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,1),1)+KK*V12(1)/Order
+           coor_y=Coor(Tri(J,1),2)+KK*V12(2)/Order
+           else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(3,KK+1)
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+           call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+           call calc_theta(coor_x,coor_y,theta)
+
+           ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+           utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+              Ux_analytic(I) =Ux_analytic(I)+ur*cos(theta)-utheta*sin(theta)
+
+              Uy_analytic(I) =Uy_analytic(I)+ur*sin(theta)+utheta*cos(theta)
+              res=max(res,2*sqrt(abs(ur)**2+abs(utheta)**2)/&
+                   &sqrt(abs(Ux_analytic(I))**2+&
+                   &abs(Uy_analytic(I))**2))
+
+
+        ENDDO
+        if(neigh(J,1).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta1)
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+         if(neigh(J,1).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,2),1)+KK*V23(1)/Order
+           coor_y=Coor(Tri(J,2),2)+KK*V23(2)/Order
+          else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(1,KK+1)
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+           call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+           call calc_theta(coor_x,coor_y,theta)
+
+           ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+           utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+              Ux_analytic(I) =Ux_analytic(I)+ur*cos(theta)-utheta*sin(theta)
+
+              Uy_analytic(I) =Uy_analytic(I)+ur*sin(theta)+utheta*cos(theta)
+              res=max(res,2*sqrt(abs(ur)**2+abs(utheta)**2)/&
+                   &sqrt(abs(Ux_analytic(I))**2+&
+                   &abs(Uy_analytic(I))**2))
+
+        ENDDO
+        if(neigh(J,2).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta1)
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+          if(neigh(J,2).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,3),1)+KK*V31(1)/Order
+           coor_y=Coor(Tri(J,3),2)+KK*V31(2)/Order
+        else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+        end if
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(2,KK+1)
+           r=sqrt(coor_x*coor_x+coor_y*coor_y)
+           call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+           call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+           call calc_theta(coor_x,coor_y,theta)
+
+           ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+           utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+              Ux_analytic(I) =Ux_analytic(I)+ur*cos(theta)-utheta*sin(theta)
+
+              Uy_analytic(I) =Uy_analytic(I)+ur*sin(theta)+utheta*cos(theta)
+              res=max(res,2*sqrt(abs(ur)**2+abs(utheta)**2)/&
+                   &sqrt(abs(Ux_analytic(I))**2+&
+                   &abs(Uy_analytic(I))**2))
+
+
+        ENDDO
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+Nphi
+        coor_x=Coor(Tri(J,1),1)+V12(1)/3.-V31(1)/3.
+        coor_y=Coor(Tri(J,1),2)+V12(2)/3.-V31(2)/3.
+        r=sqrt(coor_x*coor_x+coor_y*coor_y)
+        call RJBESL(kp*r,0.Q0,Nsomme2+2,Jrp,NCALC)	
+        call RJBESL(ks*r,0.Q0,Nsomme2+2,Jrs,NCALC)	
+        call calc_theta(coor_x,coor_y,theta)
+
+        ur=(coeffC(l)*((l-1)/(kp*r)*Jrp(l)-Jrp(l+1))*kp+coeffD(l)*(l-1)/r*Jrs(l))*cos((l-1)*theta)
+        utheta=(-coeffC(l)*(l-1)/r*Jrp(l)-coeffD(l)*((l-1)/(ks*r)*Jrs(l)-Jrs(l+1))*ks)*sin((l-1)*theta)
+
+           Ux_analytic(I) =Ux_analytic(I)+ur*cos(theta)-utheta*sin(theta)
+
+           Uy_analytic(I) =Uy_analytic(I)+ur*sin(theta)+utheta*cos(theta)
+           res=max(res,2*sqrt(abs(ur)**2+abs(utheta)**2)/&
+                &sqrt(abs(Ux_analytic(I))**2+&
+                &abs(Uy_analytic(I))**2))
+
+     ENDSELECT
+
+  enddo
+write(6,*) 'Modes', res,l,Nsomme
+end do
+
+  deallocate(J0)
+  deallocate(Y0)
+  deallocate(J0p)
+  deallocate(J0s)
+  deallocate(Jr)
+  deallocate(Yr)
+  deallocate(Jrp)
+  deallocate(Jrs)
+  deallocate(matsystcoeff)
+  deallocate(rhssystcoeff)
+  deallocate(coeffA)
+  deallocate(coeffB)
+  deallocate(coeffC)
+  deallocate(coeffD)
+end subroutine elastoacoustic_analytic_courbe2

@@ -1,0 +1,61 @@
+SUBROUTINE sub_rcv_localisation
+ 
+      Use m_gen
+      Use m_mesh
+      Use m_source
+      Use m_output
+
+      implicit none
+      real*8,save ::a(3,2),rcv_coor(2)
+      real*8,dimension(:,:),allocatable,save :: coord_rcv_ref
+      integer :: I,j
+
+      allocate(ValPhircv(nbrcv,Nphi))
+      allocate(coord_rcv_ref(nbrcv,2))
+      allocate(Ircv(nbrcv))
+!j=52
+!Ircv=0.D0
+write(6,*)'ircv',nbrcv,ircv,Ntri
+      do j=1,nbrcv
+write(6,*)'rcv1',coord_rcv(j,:),size(coord_rcv(j,:))
+rcv_coor=coord_rcv(j,:)
+write(6,*)'rcv_coor',rcv_coor,j
+!i=22904
+         DO I=1,Ntri
+            a=Coor(Tri(I,:),:)
+            call sub_transform(a,rcv_coor,coord_rcv_ref(j,:))
+!!$write(6,*)'rcv_ref',coord_rcv_ref(j,:)
+!!$if(i==17593)then
+!!$write(6,*)'coucou22904'
+!!$stop
+!!$endif
+            IF ((coord_rcv_ref(j,1).ge.-0.0000001).and.(coord_rcv_ref(j,2).ge.-0.0000001)&
+                 &.and.(coord_rcv_ref(j,1)+coord_rcv_ref(j,2).le.1.0000001)) then
+!     write(6,*) 'coucouif'
+	write(6,*)'rcv',coord_rcv_ref(j,:)
+!stop          
+Ircv(j)=I
+               SELECT CASE(ORDER)
+               CASE(1)
+                  CALL Phi2DOrder1(coord_rcv_ref(j,1),coord_rcv_ref(j,2),1,ValPhircv(j,:))     
+               CASE(2)
+                  CALL Phi2DOrder2(coord_rcv_ref(j,1),coord_rcv_ref(j,2),1,ValPhircv(j,:))     
+               CASE(3)
+                  CALL Phi2DOrder3(coord_rcv_ref(j,1),coord_rcv_ref(j,2),1,ValPhircv(j,:))     
+               END SELECT
+            exit
+            END IF
+            !break
+         enddo
+!         write(6,*)'coucoubreak',j,i
+      ENDDO
+write(6,*)'ircv',nbrcv,ircv
+!do i=1,nbrcv
+!if(ircv(i)==0) then
+!write(6,*)'pas bon'
+!endif
+!enddo
+!write(6,*)'fini'
+!stop       
+
+END SUBROUTINE sub_rcv_localisation

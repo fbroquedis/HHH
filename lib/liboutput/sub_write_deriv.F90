@@ -1,0 +1,34 @@
+subroutine sub_write_deriv
+
+      Use m_mat
+      Use m_output
+      Use m_gen
+      Use m_source
+      Use m_mesh
+
+      implicit none
+      character*100 :: nam
+      real*8 :: Ecrit(Nphi)
+      real*8,dimension(:,:),allocatable,save::Stock(:)
+      integer :: j,i
+
+
+!      allocate(Stock(nbrcv))
+	
+ !     nbsis=nbsis+1
+
+    !do i=1:
+     !    j=ircv(i)
+
+    !     Ecrit=U((j-1)*Nphi+1:j*Nphi)
+
+ !Stock(i)=W2_new(I)
+
+  !    enddo
+
+         write(21,*) W2_new_deriv
+
+         
+
+!deallocate(Stock)
+end subroutine sub_write_deriv

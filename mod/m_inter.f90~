@@ -1,0 +1,14 @@
+module m_inter
+
+  implicit none
+  real*8,dimension (:),allocatable,save :: Q,Qold,Qinter,UUold,dUinter,Xinter
+  real*8,dimension (:),allocatable,save :: ddUinter,phi1inter,dphi1inter,ddphi1inter
+  real*8,dimension (:),allocatable,save :: AAQ,AS,S,F0,Z,Z2,Gphi1,CUold,EU,Dphi1,AUold,AUinter
+  real*8,dimension (:),allocatable,save :: MUold,BU,BUold,Bclaphi1,Bclaphi1old,Gphi1old,MUinter,munew
+  real*8,dimension (:),allocatable,save ::MPold,MPinter,APold,Apinter
+  real*8,dimension (:,:),allocatable,save :: Bclaphi,Bclaphiold,Dphi,phiglobinter
+  real*8,dimension (:),allocatable,save :: Bclapsi,Bclapsiold,AAU,Winter,BclaWold,GWold,Bvaraux
+  real*8,dimension (:),allocatable,save :: Eubord,Bubord
+  real*8,dimension (:),allocatable,save :: BclaW,EW,EU2,BclaW2new,BclaW2old,BclaU2new,BclaU2old
+  real*8,dimension (:),allocatable,save :: Bclavarauxold,Bclavarauxold2,BclaWold2,EUold
+end module m_inter

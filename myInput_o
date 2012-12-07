@@ -1,0 +1,7 @@
+"MAILLAGES/cercle3_julien_border" Nom du maillage
+3 Ordre des elements
+1 Neumann uniquement : 0 Autres : 1
+0 source : 0    onde incidente : 1
+0 0 Position de la source
+0 sismogramme
+0 1.5

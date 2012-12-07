@@ -1,0 +1,65 @@
+SUBROUTINE sub_param_phys
+  Use m_gen
+  Use m_mesh
+  implicit none
+
+  INTEGER :: i , Iloc
+  real*8 :: lambda, mu2, Cf, Cs, Cp 
+  allocate(Mu(Ntri))
+  allocate(Rho(Ntri))
+  allocate(Cij(Nsol+Nsolflu,3,3))
+  Mu=0.D0
+  Rho=0.D0
+!!$  Cf=1500D0
+!!$  Cs=3122D0
+!!$  Cp=6198D0
+  Cf=1D0
+  Cs=1D0
+  Cp=2D0
+
+  Cij=0D0
+  DO I=1,NTRI
+     SELECT CASE (Type_Media(I))
+     CASE(1)
+!!$        Rho(I)=1000D0
+        rho(I)=1D0
+        Mu(I)=Cf**2*rho(I)
+
+!!$        Mu(I)=1D0
+!!$        rho(I)=1D0
+        !         Rho(I)=1/1500D0**2
+     CASE(2)
+!!$        RHO(I)=2700D0 
+        RHO(I)=1D0 
+        mu2=Cs**2*rho(I)
+        lambda=Cp**2*rho(I)-2*mu2
+        Mu(I)=cp**2*rho(I)
+!!$         Mu(I)=cs**2*rho(I)
+!!$        rho(I)=4D0
+!!$        Mu(I)=4D0
+!!$        lambda=4.D0
+!!$        mu2=0.d0
+        !         RHO(I)=1/4000D0**2
+        Iloc=I-Nflu-Nflusol
+        Cij(Iloc,1,1)=lambda+2*mu2
+        Cij(Iloc,1,2)=lambda
+        Cij(Iloc,1,3)=0D0
+        Cij(Iloc,2,1)=lambda
+        Cij(Iloc,2,2)=lambda+2*mu2
+        Cij(Iloc,2,3)=0D0		
+        Cij(Iloc,3,1)=0D0
+        Cij(Iloc,3,2)=0D0
+        Cij(Iloc,3,3)=mu2
+!!$			Cij(Iloc,1,1)=MU(I)
+!!$			Cij(Iloc,1,2)=MU(I)
+!!$			Cij(Iloc,1,3)=0D0
+!!$			Cij(Iloc,2,1)=MU(I)
+!!$			Cij(Iloc,2,2)=MU(I)
+!!$			Cij(Iloc,2,3)=0D0		
+!!$			Cij(Iloc,3,1)=0D0
+!!$			Cij(Iloc,3,2)=0D0
+!!$			Cij(Iloc,3,3)=0D0			
+     END SELECT
+  END DO
+END SUBROUTINE sub_param_phys
+

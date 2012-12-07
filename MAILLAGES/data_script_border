@@ -1,0 +1,28 @@
+#!/bin/bash
+
+if [ $1 -gt 10  ]
+then
+  mv cercle3_julien_border.1.neigh cercle3_julien_border.1.neigh.small
+  mv cercle3_julien_border.1.ele   cercle3_julien_border.1.ele.small
+  mv cercle3_julien_border.1.poly  cercle3_julien_border.1.poly.small
+  mv cercle3_julien_border.1.node  cercle3_julien_border.1.node.small
+
+  mv cercle3_julien_border.1.neigh.gros cercle3_julien_border.1.neigh
+  mv cercle3_julien_border.1.ele.gros   cercle3_julien_border.1.ele
+  mv cercle3_julien_border.1.poly.gros  cercle3_julien_border.1.poly
+  mv cercle3_julien_border.1.node.gros  cercle3_julien_border.1.node
+
+else
+  if [ $1 -lt 10 ]
+  then
+    mv cercle3_julien_border.1.neigh cercle3_julien_border.1.neigh.gros
+    mv cercle3_julien_border.1.ele   cercle3_julien_border.1.ele.gros
+    mv cercle3_julien_border.1.poly  cercle3_julien_border.1.poly.gros
+    mv cercle3_julien_border.1.node  cercle3_julien_border.1.node.gros
+    
+    mv cercle3_julien_border.1.neigh.small cercle3_julien_border.1.neigh      
+    mv cercle3_julien_border.1.ele.small   cercle3_julien_border.1.ele      
+    mv cercle3_julien_border.1.poly.small  cercle3_julien_border.1.poly      
+    mv cercle3_julien_border.1.node.small  cercle3_julien_border.1.node  
+  fi
+fi

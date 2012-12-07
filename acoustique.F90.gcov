@@ -1,0 +1,532 @@
+        -:    0:Source:lib/bin/acoustique.F90
+        -:    0:Graph:acoustique.gcno
+        -:    0:Data:acoustique.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        1:    1:program acoustique
+        -:    2:!!!!!!!!!!!!!!!!!!!!!!
+        -:    3:!!!!!!!!!!!!!!!!!!!!!!
+        -:    4:!!!!!!!!!!!!!!!!!!!!!!
+        -:    5:! En acoustique, pense à déclarer A réel (dans mod/m_mat.f90)
+        -:    6:! Attention aussi a la courbure
+        -:    7:!!!!!!!!!!!!!!!!!!!!!!
+        -:    8:!!!!!!!!!!!!!!!!!!!!!!
+        -:    9:!!!!!!!!!!!!!!!!!!!!!!
+        1:   10:  Use m_condbord    
+        -:   11:  Use m_mat
+        -:   12:  Use m_gen
+        -:   13:  Use m_mesh
+        -:   14:  Use m_output
+        -:   15:  Use m_source
+        -:   16:  Use m_inter
+        -:   17:
+        -:   18:
+        -:   19:  implicit none 
+        -:   20:  character*100 :: nommaillage
+        -:   21: ! character*100 :: nam
+        -:   22:  integer :: I,J,toto,K,N,INFO,PhiEdge(3,2),II,taille,III,tmp,nmax,forme_obstacle
+        -:   23:!  real*8,dimension (:,:,:),allocatable :: Araff,Anoraff,Bcla2inverse
+        1:   24:  integer, dimension (:,:),allocatable ::IPIV,IPIV2
+        -:   25:  real*8, dimension(:,:), allocatable,save :: F,Fcomp
+        -:   26:  integer :: ntfinal,recep,obstacle,Ineigh,Arete,l,int_j,periodic
+        -:   27:integer, parameter ::Nphi1=1,Nphi2=6,Nphi3=10
+        -:   28:  real*8 :: pi,x1,y1,x,y,x2,y2,x3,y3,demi_grand_axe_a,demi_petit_axe_b,rayon_cercle
+        -:   29:  real*8 :: courbure1,courbure2,aire_arete,theta0
+        -:   30:  real*8 :: x_centre,y_centre,d1,d2,d3,dtmp,theta_snap
+        1:   31:  real*8,dimension (:),allocatable :: Ftest,Ftest1
+        -:   32:!integer,dimension (:),allocatable :: PhiEdge
+        -:   33:!  integer, dimension(:),allocatable :: num_rcv
+        -:   34:REAL*8,allocatable :: Phi(:,:)
+        -:   35:	REAL*8,allocatable :: GradPhi1D(:,:,:,:)	
+        -:   36:!!!Pour un milieu périodique :::
+        -:   37:periodic=0
+        1:   38:helmholtz=0
+        -:   39:  pi=acos(-1.0)
+        -:   40:
+        -:   41:!allocate(PhiEdge(3,2))
+        1:   42:     PhiEdge(1,1)=2
+        1:   43:     PhiEdge(1,2)=3
+        1:   44:     PhiEdge(2,1)=3
+        1:   45:     PhiEdge(2,2)=1
+        1:   46:     PhiEdge(3,1)=1
+        1:   47:     PhiEdge(3,2)=2
+        -:   48:
+        -:   49:!!!!!!!!!!!!!!!!!!!!!!
+        -:   50:!!
+        -:   51:!!   TEMPS FINAL
+        -:   52:!!
+        -:   53:!!!!!!!!!!!!!!!!!!!!!!
+        -:   54: ! ntfinal=5000
+        -:   55:  ntfinal=6000
+        -:   56:
+        1:   57:xgrid1=-1.5D0
+        1:   58:xgrid2=1.5D0
+        1:   59:ygrid1=-1.5D0
+        1:   60:ygrid2=1.5D0
+        1:   61:stepx=0.005
+        1:   62:stepy=0.005
+        -:   63:
+        -:   64:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:   65:!!
+        -:   66:!!   LECTURE DES DONNEES : MAILLAGE, ORDRE DES ELEMENTS, ...
+        -:   67:!!
+        -:   68:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:   69:
+        -:   70:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:   71:!!        nom du maillage
+        -:   72:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        1:   73:  write(6,*) 'Name of mesh files?'
+        1:   74:  read(5,*) nommaillage
+        1:   75:  J=len_trim(nommaillage)
+        1:   76:  write(6,*) trim(nommaillage)
+        -:   77:
+        -:   78:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:   79:!!      ordre des éléments
+        -:   80:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        1:   81:  write(6,*) 'Order of the elements'
+        1:   82:  read(5,*) Order
+        -:   83:!! Nphi : Nb de ddl par element. 
+        -:   84:!! alpha : parametre de penalisation
+        -:   85:  SELECT CASE(Order)
+        -:   86:  CASE(1)
+    #####:   87:     Nphi=3
+    #####:   88:     alpha=3
+        -:   89:  CASE(2)
+    #####:   90:     Nphi=6
+    #####:   91:     alpha=5
+        -:   92:  CASE(3)
+        1:   93:      Nphi=10
+        1:   94:     alpha=10
+        1:   95:     alpha2=6
+        -:   96:  CASE DEFAULT
+    #####:   97:     write(6,*) 'Not implemented'
+        1:   98:     stop
+        -:   99:  END SELECT
+        -:  100:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  101:!! type de conditions de bord
+        -:  102:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  103:
+        1:  104:  write(6,*) 'Conditions autres que Neumann sur les bords?'
+        1:  105:  read(5,*) CondBord
+        -:  106:
+        -:  107:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  108:!!     type de domaine : 
+        -:  109:!!     cercle ou donut ? 
+        -:  110:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  111: ! write(6,*) 'Rayon du cercle ?'
+        -:  112: ! read(5,*) rayon
+        1:  113:  write(6,*) 'Y-a-t''il un obstacle ?'
+        1:  114:  read(5,*) obstacle
+        -:  115:
+        -:  116:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  117:!! source ou onde incidente
+        -:  118:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        1:  119:  if (obstacle==1) then
+    #####:  120:        write(6,*) 'Omega ?'
+    #####:  121:	read(5,*) omega_incident
+    #####:  122:        write(6,*)omega_incident
+    #####:  123:        write(6,*) 'theta incident?'
+    #####:  124:        read(5,*) theta0
+    #####:  125:        write(6,*) theta0
+        -:  126:    else
+        1:  127:	write(6,*) 'Center of Initial Condition'
+        1:  128:	read(5,*) x0,y0
+        1:  129:	write(6,*) x0,y0	
+        -:  130:  end if
+        -:  131:
+        -:  132:
+        -:  133:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  134:!!
+        -:  135:!!    Lecture du maillage
+        -:  136:!!
+        -:  137:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  138:
+        1:  139:  write(6,*) 'Reading file ',  nommaillage(1:J)//".1.node"
+        1:  140:  open(20,FILE=trim(nommaillage)//".1.node")
+        1:  141:  read(20,*) NPoints
+        1:  142:  write(6,*) NPoints, ' nodes'
+        -:  143:
+        -:  144:
+        1:  145:  allocate(Coor(Npoints,2))
+        -:  146:!!! On lit les coordonnées de chaque sommet et eventuellement la condition de bord
+        1:  147:  IF (CondBord==0) then
+    #####:  148:     iscla=0
+    #####:  149:     DO I=1,NPoints
+    #####:  150:        READ(20,*) toto,Coor(I,1),Coor(I,2)
+        -:  151:     ENDDO
+        -:  152:  else
+        1:  153:     allocate(CondPoint(Npoints))
+     5397:  154:     DO I=1,NPoints
+     5396:  155:        READ(20,*) toto,Coor(I,1),Coor(I,2),CondPoint(I)
+        -:  156:     ENDDO
+        1:  157:     IF (maxval(CondPoint(1:Npoints))==3) then
+        1:  158:        iscla=1
+        -:  159:     else
+    #####:  160:        iscla=0
+        -:  161:     end IF
+        -:  162:  END IF
+        1:  163:  close(20)
+        -:  164:
+        1:  165:  write(6,*) 'Reading file ',  nommaillage(1:J)//".1.ele"
+        1:  166:  open(20,FILE=trim(nommaillage)//".1.ele")
+        1:  167:  read(20,*) NTri
+        1:  168:  write(6,*) NTri, ' triangles'
+        -:  169:  if(periodic.eq.1) then
+        -:  170:     Ntri=2*Ntri
+        -:  171:  end if
+        1:  172:  allocate(Tri(NTri,3))
+        2:  173:  allocate(Type_Media(NTri))
+        -:  174:!!! On lit les trois sommets de chaque triangle et sa vitesse
+    10671:  175:  DO I=1,NTri
+    10670:  176:     READ(20,*) toto,Tri(I,1),Tri(I,2),Tri(I,3),Type_Media(I)
+        -:  177:  ENDDO
+        1:  178:  close(20)
+        1:  179:  write(6,*) 'Reading file ',  nommaillage(1:J)//".1.neigh"
+        1:  180:  open(20,FILE=trim(nommaillage)//".1.neigh")
+        1:  181:  read(20,*) NNeigh
+        1:  182:  if (NNeigh.ne.NTri) then
+    #####:  183:     write(6,*) 'Error : NNeigh is different from NTri'
+    #####:  184:     stop
+        -:  185:  endif
+        1:  186:     allocate(Neigh(NTri,3))
+        -:  187:
+        -:  188:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  189:!!
+        -:  190:!!       CONSTRUCTION DES VOISINS A L'INTERIEUR
+        -:  191:!!
+        -:  192:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        1:  193:write(6,*)'debut construction voisin'
+        -:  194:!On lit les voisins de chaque triangles (le voisin i est opposé au sommet i)
+    10671:  195:  DO I=1,NTri
+    10670:  196:    READ(20,*) toto,Neigh(I,1),Neigh(I,2),Neigh(I,3)
+        -:  197:!! How to read Neigh : triangle Neigh(I,1) is a neighbourg of triangle I. They are connected by edge Tri(I,2),Tri(I,3).
+        -:  198:  ! a-t-on autre chose que Neumann sur le bord
+    10670:  199:    IF (Condbord==1) then
+    32010:  200:       DO J=1,3
+        -:  201:	!le triangle I a-t-il un voisin connecté par l'arête J
+    32010:  202:         IF (Neigh(I,J)==-1) then
+      120:  203:             If (CondPoint(Tri(I,PhiEdge(J,1))).gt.0) then           
+      120:  204:     Neigh(I,J)=-CondPoint(Tri(I,PhiEdge(J,1)))
+    #####:  205:             elseif (CondPoint(Tri(I,PhiEdge(J,2))).gt.0) then
+    #####:  206:                Neigh(I,J)=-CondPoint(Tri(I,PhiEdge(J,2)))
+        -:  207:             END If
+        -:  208:          END IF
+        -:  209:       END DO
+        -:  210:    END IF
+        -:  211:  END DO
+        1:  212:call sub_renum2
+        1:  213:call sub_param_phys
+        -:  214:!!!!!!!!!!!!!!!!!!!!!
+        -:  215:!!
+        -:  216:!!    SISMOGRAMMES
+        -:  217:!!
+        -:  218:!!!!!!!!!!!!!!!!!!!!!
+        1:  219:     write(6,*) 'Combien de sismogrammes voulez-vous?'
+        1:  220:     read(5,*) nbrcv
+        1:  221:     write(6,*) nbrcv
+        -:  222:! Cas où on donne toutes les coordonnées
+        1:  223:     if(nbrcv.ge.1) then
+    #####:  224:        allocate(coord_rcv(nbrcv,2))
+        -:  225:	recep=1
+    #####:  226:	DO i=1,nbrcv
+    #####:  227:          write(6,*)'coordonnées du récepteur ', i ,' :'
+    #####:  228:          read(5,*)x_rcv,y_rcv
+    #####:  229:          write(6,*) x_rcv,y_rcv
+    #####:  230:          coord_rcv(i,1)=x_rcv
+    #####:  231:          coord_rcv(i,2)=y_rcv
+        -:  232:	END DO
+        -:  233:     endif
+        -:  234:
+        -:  235:
+        -:  236: 
+        -:  237:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  238:!!
+        -:  239:!!           CONSTRUCTION DES ARETES DU BORD
+        -:  240:!!
+        -:  241:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  242:!!On libère un peu de mémoire
+        1:  243:    IF (Condbord==1) then
+        1:  244:  deallocate(Condpoint)
+        -:  245:  endif
+        1:  246:  close(20)
+        -:  247:
+        -:  248: 
+        -:  249:
+        -:  250:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  251:!!
+        -:  252:!!    APPEL DES MATRICES
+        -:  253:!!
+        -:  254:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  255:
+        1:  256:  Call sub_allocate
+        -:  257:!!!Définition des formules d'interpolation 2D et 3D (noeuds et poids sur l'élément de référence
+        1:  258:  CALL sub_defGL2D
+        1:  259:  CALL sub_defGL1D
+        -:  260:
+        -:  261:!!!On construit la matrice de masse et celle de raideur
+        1:  262:  CALL sub_defmassmat
+        -:  263:
+        -:  264:
+        1:  265:  Call sub_defstiffmat
+        -:  266: 
+        1:  267:  if (iscla==1) then
+        -:  268:    ! On calcule les matrices associées aux CLA
+        1:  269:    call sub_CLA
+        -:  270:   !  call sub_defmatBBCLA_bis
+        -:  271:  endif
+        -:  272:
+        -:  273:
+        -:  274:
+        -:  275:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  276:!!
+        -:  277:!!    CALCUL DU dt EN FONCTION DE LA CFL
+        -:  278:!!
+        -:  279:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  280:      
+        1:  281:  write(6,*) CFL
+        -:  282:  
+        -:  283:  SELECT CASE(Order)
+        -:  284:  CASE(1)
+    #####:  285:    dt=cfl*0.125
+        -:  286:  CASE(2)
+    #####:  287:    dt=cfl*.156
+        -:  288:  CASE(3)
+        -:  289:!    dt=cfl*0.05
+        -:  290:!    dt=cfl*0.048
+        2:  291:    dt=cfl*0.048*.5
+        -:  292: !  dt=0.066375
+        -:  293:  END SELECT
+        -:  294:!dt=3.00000000000000006E-003
+        1:  295:write(6,*) cfl
+        -:  296:
+        -:  297:
+        -:  298:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  299:!!
+        -:  300:!!    Source ou onde incidente
+        -:  301:!! Pour l'instant on ne regarde que le deuxième cas
+        -:  302:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        1:  303:if (obstacle==1) then
+        -:  304:	!! onde incidente
+        -:  305:!        write(6,*) 'hello'
+    #####:  306:	call sub_rcv_localisation
+        -:  307:
+        -:  308:!        write(6,*) 'hello 2'
+        -:  309:    else
+        -:  310:	!! source
+        1:  311:	call sub_source_localisation
+        1:  312:	call sub_val_source
+        1:  313:	call sub_rcv_localisation
+        1:  314:	call sub_centre
+        1:  315:ValPhisource=Matmul(Minv,ValPhisource)/DFVec(Isource)
+        -:  316:end if
+        -:  317:
+        -:  318:
+        -:  319:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  320:!!
+        -:  321:!!  ON COMPTE LES INSTANTS POUR NE PAS TOUT REPRESENTER
+        -:  322:!!
+        -:  323:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        1:  324:NBINST=0
+        1:  325:NBINST2=0
+        1:  326:nbsis=0
+        1:  327:write(6,*) CFL,dt
+        1:  328:write(6,*) 'dt',dt
+        -:  329:
+        -:  330:
+        -:  331:
+        -:  332:
+        -:  333:!stop
+        -:  334:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  335:!!
+        -:  336:!!     ON STOCKE LES SISMOS, ...
+        -:  337:!!
+        -:  338:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  339:
+        -:  340:!fichier qui stocke le sismo
+        1:  341: open(21,File="FILM/sismos_.dat")
+        1:  342: open(22,File="FILM/energ_cinetik.dat")
+        -:  343:!write(6,*) 'test7'
+        1:  344:if (obstacle==1)then
+    #####:  345:allocate(F(Ntri*Nphi,1))
+    #####:  346:allocate(Fcomp(Ntri*Nphi,1))
+    #####:  347:F=0.D0
+    #####:  348:Fcomp=0.D0
+    #####:  349:write(6,*) 'toto1'
+    #####:  350: call sub_rhsacoustique(F,Fcomp,omega_incident,theta0)
+    #####:  351:write(6,*) 'toto2'
+        -:  352:else
+        1:  353:allocate(F(Nphi,1))
+        -:  354:endif
+        -:  355:!fichier qui stocke les valeurs de phi1
+        -:  356:!open(22,File="FILM/phi1.dat")
+        -:  357:
+        -:  358:!saving the mesh in FILM/mesh.vtu
+        -:  359:! if (iscla==1) then
+        -:  360:! call sub_writemeshCLA
+        -:  361:!else
+        1:  362: call sub_writemesh
+        -:  363:!endif
+        -:  364:
+        1:  365: call sub_write_pas_de_temps(dt)
+        -:  366:
+        -:  367:
+        -:  368:
+        -:  369:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  370:!!
+        -:  371:!!    ALLOCATIONS
+        -:  372:!!
+        -:  373:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  374:
+        -:  375:!! U
+        1:  376:if (obstacle==1) then
+    #####:  377:allocate(U_inc(Nphi*Ntri))
+    #####:  378:U_inc=0.D0
+        -:  379:else
+        1:  380:F=0.D0
+        -:  381:endif
+        1:  382:Uold=0.D0
+        1:  383:U=0.D0
+        1:  384:taille=size(Uold)
+        1:  385:theta0 = 0.d0
+        -:  386:
+        -:  387:!!les vecteurs AU, ...
+        1:  388:allocate(AUold(Nphi*Ntri))
+        2:  389:allocate(AUinter(Nphi*Ntri))
+        2:  390:allocate(MUnew(taille))
+        2:  391:allocate(MUold(taille))
+        2:  392:allocate(MUinter(Nphi*Ntri))
+        2:  393:allocate(CUold(taille))
+        -:  394:
+        -:  395:
+        -:  396:!!vecteur contenant U et W
+        2:  397:allocate(Ftest(Nphi))
+        2:  398:allocate(Ftest1(Nphi))
+        -:  399:
+        -:  400:
+        1:  401:write(6,*) 'COUCOU C MOI'
+        -:  402:!write(6,*) Dclabis(:,:,:)
+        -:  403:!stop
+        -:  404:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  405:!!
+        -:  406:!!    LA BOUCLE EN TEMPS
+        -:  407:!!
+        -:  408:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        1:  409:write(6,*) Narete_du_bord
+   106702:  410:AU=0.D0
+        1:  411:AUold=0.D0
+        1:  412:AUinter=0.D0
+        1:  413:MUnew=0.D0
+        1:  414:MUold=0.D0
+        1:  415:MUinter=0.D0
+        1:  416:Cuold=0.D0
+        -:  417:
+        1:  418:  if (iscla==1) then
+        1:  419:allocate(IPIV(Nbcla,Nphi))
+        -:  420:! On calcule et on factorise I+dt/2*Bcla par la factorisation LU
+       12:  421:     Bcla2=0.D0      
+      121:  422:     DO I=1,NbCla
+     1320:  423:        DO J=1,Nphi
+     1200:  424:          Bcla2(I,J,J)=1.D0
+        -:  425:        END DO
+        -:  426:        !! Attention, la j'ai mis la courbure
+        -:  427:!        Bcla2(I,:,:)=Bcla2(I,:,:)+(dt/2.+dt**2/4d0/2D0)*Bcla(I,:,:)
+      120:  428:        Bcla2(I,:,:)=Bcla2(I,:,:)+dt/2.*Bcla(I,:,:)/sqrt(rho(TriCla(I))*mu(TriCla(I)))
+      120:  429:        call DGETRF( Nphi, Nphi,Bcla2(I,:,:), Nphi, IPIV(I,:),INFO )
+        -:  430:     ENDDO
+        -:  431:  end if
+        -:  432:!!! La boucle en temps (enfin)
+     6002:  433:DO N=0,ntfinal
+     6001:  434:     write(6,*) N
+        -:  435:
+        -:  436:     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  437:     !!
+        -:  438:     !!       TRIANGLE A L'INTERIEUR
+        -:  439:     !!
+        -:  440:     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        -:  441:     SELECT CASE(ORDER)
+        -:  442:     CASE(1)
+    #####:  443:  !$OMP PARALLEL DO    DEFAULT(SHARED) PRIVATE(I)    
+        -:  444:     DO I=1,Ntri
+    #####:  445:        AU((I-1)*Nphi1+1:I*Nphi1)=-MATMUL(A(I,1:Nphi1,1:Nphi1),U((I-1)*Nphi1+1:I*Nphi1))
+        -:  446:
+    #####:  447:        DO J=1,3
+    #####:  448:           IF (Neigh(I,J).gt.0) then
+        -:  449:              AU((I-1)*Nphi1+1:I*Nphi1)=AU((I-1)*Nphi1+1:I*Nphi1)-MATMUL(A(I,1:Nphi1,J*Nphi1+1:(J+1)*Nphi1)&
+    #####:  450:                   &,U((Neigh(I,J)-1)*Nphi1+1:Neigh(I,J)*Nphi1))
+        -:  451:           end IF
+        -:  452:        END DO
+        -:  453:!!!!!!!!!!!!!
+        -:  454:      END DO  
+        -:  455: !$OMP END PARALLEL DO
+    #####:  456: !$OMP TASKWAIT
+        -:  457:CASE(2)
+    #####:  458:  !$OMP PARALLEL DO    DEFAULT(SHARED) PRIVATE(I)    
+        -:  459:     DO I=1,Ntri
+    #####:  460:        AU((I-1)*Nphi2+1:I*Nphi2)=-MATMUL(A(I,1:Nphi2,1:Nphi2),U((I-1)*Nphi2+1:I*Nphi2))
+        -:  461:
+    #####:  462:        DO J=1,3
+    #####:  463:           IF (Neigh(I,J).gt.0) then
+        -:  464:              AU((I-1)*Nphi2+1:I*Nphi2)=AU((I-1)*Nphi2+1:I*Nphi2)-MATMUL(A(I,1:Nphi2,J*Nphi2+1:(J+1)*Nphi2)&
+    #####:  465:                   &,U((Neigh(I,J)-1)*Nphi2+1:Neigh(I,J)*Nphi2))
+        -:  466:           end IF
+        -:  467:        END DO
+        -:  468:!!!!!!!!!!!!!
+        -:  469:      END DO  
+        -:  470: !$OMP END PARALLEL DO
+    #####:  471: !$OMP TASKWAIT
+        -:  472:CASE(3)
+     6001:  473:  !$OMP PARALLEL DO    DEFAULT(SHARED) PRIVATE(I)    
+        -:  474:     DO I=1,Ntri
+698539050:  475:        AU((I-1)*Nphi3+1:I*Nphi3)=-MATMUL(A(I,1:Nphi3,1:Nphi3),U((I-1)*Nphi3+1:I*Nphi3))
+        -:  476:
+191169309:  477:        DO J=1,3
+190679396:  478:           IF (Neigh(I,J).gt.0) then
+        -:  479:              AU((I-1)*Nphi3+1:I*Nphi3)=AU((I-1)*Nphi3+1:I*Nphi3)-MATMUL(A(I,1:Nphi3,J*Nphi3+1:(J+1)*Nphi3)&
+189015703:  480:                   &,U((Neigh(I,J)-1)*Nphi3+1:Neigh(I,J)*Nphi3))
+        -:  481:           end IF
+        -:  482:        END DO
+        -:  483:!!!!!!!!!!!!!
+        -:  484:      END DO  
+        -:  485: !$OMP END PARALLEL DO
+    12002:  486: !$OMP TASKWAIT
+        -:  487:   END SELECT
+     6001:  488:  !$OMP PARALLEL DO    DEFAULT(SHARED) PRIVATE(I)    
+        -:  489:     DO I=1,Ntri*Nphi
+    25071:  490:      U(i)=dt**2*AU(i)+2*U(i)-Uold(i)
+        -:  491:   END DO
+        -:  492: !$OMP END PARALLEL DO
+     6001:  493: !$OMP TASKWAIT
+        -:  494:
+     6001:  495:      F(:,1)=ValPhisource(:,1)*Valsource(N+1)
+     6001:  496:      U((Isource-1)*Nphi+1:Isource*Nphi)=U((Isource-1)*Nphi+1:Isource*Nphi)+dt**2*F(:,1)
+        -:  497:!!! Absorbing boundary conditions
+     6001:  498:  if (iscla==1) then
+     6001:  499:  !$OMP PARALLEL DO    DEFAULT(SHARED) PRIVATE(I,Ftest,Info,J)    
+        -:  500:     DO I=1,NbCla
+   702780:  501:        J=TriCla(I)
+  7328650:  502:        Ftest=U((J-1)*Nphi+1:J*Nphi)+dt/2.D0*matmul(Bcla(I,1:Nphi,1:Nphi),Uold((J-1)*Nphi+1:J*Nphi))/sqrt(rho(J)*mu(J))
+        -:  503:        !! On divise par (I+dt/2*C)
+  1404811:  504:       CALL DGETRS( 'N',Nphi, 1,Bcla2(I,:,:), Nphi, IPIV(I,:),Ftest,Nphi,INFO )
+   756433:  505:        U((J-1)*Nphi+1:J*Nphi)=Ftest
+        -:  506:     ENDDO
+        -:  507: !$OMP END PARALLEL DO
+     6001:  508: !$OMP TASKWAIT
+        -:  509:   end if
+     6001:  510:flush(22)
+        -:  511:
+     6001:  512:  Uold=Uinter
+     6001:  513:  Auold=AUinter
+     6001:  514:  AUinter=AU
+     6001:  515:  MUold=MUinter
+     6001:  516:  MUinter=MUnew
+     6001:  517:  Uinter=U
+        -:  518:
+        -:  519:!IF(Mod(N,200).eq.0) then 
+        -:  520:!  NBINST=NBINST+1
+        -:  521:!  call sub_writeunstruct(N)
+        -:  522:!END IF
+        -:  523: END DO
+        -:  524:
+        1:  525: close(21)  
+        1:  526: close(22)
+        1:  527:end program acoustique

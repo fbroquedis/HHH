@@ -1,0 +1,720 @@
+subroutine sub_solution_ondeplane_exact_grad_courbe(theta0,R0)
+  Use m_condbord    
+  Use m_mat
+  Use m_gen
+  Use m_mesh
+  implicit none 
+  real*8,dimension(:),allocatable :: vectJ
+  complex*16, dimension(:), allocatable ::Valsourcebord
+  complex*16, dimension(:,:), allocatable ::Gradvalsourcebord
+  complex*16 :: GradPhiIG(2)
+  real*8 :: V12(2),V23(2),V31(2),Jfinv(2,2),thetai(2),norm(3,2),h2,hmin,coor_x,coor_y,theta
+  real*8 :: coorx1,coorx2,coory1,coory2,cmax,R0
+  integer :: Node(3),I,int_j,J,l,NsommeNum,K,NCALC,Ineigh,PhiEdge(3,1+Order),Nsomme,KK
+
+
+  real*8 :: demi_grand_axe_a,demi_petit_axe_b,h1,ksi,theta0,foc,pi
+
+  REAL*8 :: Phi(1+Order,NGL1D),coord_points(4)
+
+  REAL*8:: GradPhi1D(3,Nphi,2,NGL1D),d
+  real*8 :: theta1,theta2,dtheta
+  pi=2.q0*asin(1.q0)
+  SELECT CASE(Order)
+  CASE(1)
+     !On edge 1 (23)
+     CALL GradPhiOrder1(1-PtGL1D,PtGL1D,NGL1D,GradPhi1D(1,:,:,:))
+     !On edge 2 (31)
+     CALL GradPhiOrder1(0*PtGL1D,1-PtGL1D,NGL1D,GradPhi1D(2,:,:,:))
+     !On edge 3 (12)
+     CALL GradPhiOrder1(PtGL1D,0*PtGL1D,NGL1D,GradPhi1D(3,:,:,:))
+     CALL Phi1DOrder1(PtGL1D,NGL1D,Phi)
+
+     !Functions on Edge 23
+     PhiEdge(1,1)=2
+     PhiEdge(1,2)=3
+     !Functions on Edge 31
+     PhiEdge(2,1)=3
+     PhiEdge(2,2)=1
+     !Functions on Edge 12
+     PhiEdge(3,1)=1
+     PhiEdge(3,2)=2
+  CASE(2)
+     !On edge 1 (23)
+     CALL GradPhiOrder2(1.-PtGL1D,PtGL1D,NGL1D,GradPhi1D(1,:,:,:))
+     !On edge 2 (31)
+     CALL GradPhiOrder2(0.*PtGL1D,1.-PtGL1D,NGL1D,GradPhi1D(2,:,:,:))
+     !On edge 3 (12)
+     CALL GradPhiOrder2(PtGL1D,0.*PtGL1D,NGL1D,GradPhi1D(3,:,:,:))
+     CALL Phi1DOrder2(PtGL1D,NGL1D,Phi)
+     !Functions on Edge 23
+     PhiEdge(1,1)=2
+     PhiEdge(1,2)=5
+     PhiEdge(1,3)=3
+     !Functions on Edge 31
+     PhiEdge(2,1)=3
+     PhiEdge(2,2)=6
+     PhiEdge(2,3)=1
+     !Functions on Edge 12
+     PhiEdge(3,1)=1
+     PhiEdge(3,2)=4
+     PhiEdge(3,3)=2
+  CASE(3)
+     !On edge 1 (23)
+     CALL GradPhiOrder3(1.-PtGL1D,PtGL1D,NGL1D,GradPhi1D(1,:,:,:))
+     !On edge 2 (31)
+     CALL GradPhiOrder3(0.*PtGL1D,1.-PtGL1D,NGL1D,GradPhi1D(2,:,:,:))
+     !On edge 1 (12)
+     CALL GradPhiOrder3(PtGL1D,0.*PtGL1D,NGL1D,GradPhi1D(3,:,:,:))
+     CALL Phi1DOrder3(PtGL1D,NGL1D,Phi)
+     !Functions on Edge 23
+     PhiEdge(1,1)=2
+     PhiEdge(1,2)=6
+     PhiEdge(1,3)=7
+     PhiEdge(1,4)=3
+     !Functions on Edge 31
+     PhiEdge(2,1)=3
+     PhiEdge(2,2)=8
+     PhiEdge(2,3)=9
+     PhiEdge(2,4)=1
+     !Functions on Edge 12
+     PhiEdge(3,1)=1
+     PhiEdge(3,2)=4
+     PhiEdge(3,3)=5
+     PhiEdge(3,4)=2
+  END SELECT
+
+
+  L=Nflu+Nflusol+1
+  !!Calcul de l'onde plane p aux ddl d'ordre 1
+
+  Do J=1,Nflu+Nflusol
+
+     DO int_j=1,3
+        coor_x = Coor(Tri(J,int_j),1)
+        coor_y = Coor(Tri(J,int_j),2)
+        P_analytic((J-1)*Nphi+int_j) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))
+     enddo
+
+  enddo
+
+  !!Calcul de u = grad(psi) avec l'onde plane psi (ordre 1)
+
+  Do J=Nflu+Nflusol+1,Nflu+Nflusol+Nsolflu+Nsol
+     theta=0.Q0
+
+     Node = Tri(J,:)
+     I=((J-1)-Nflu-Nflusol)*Nphi
+     DO int_j=1,3
+
+        coor_x = Coor(Tri(J,int_j),1)
+        coor_y = Coor(Tri(J,int_j),2)
+
+        Ux_analytic(I+int_j) =  cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*cos(theta)))* exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta)))))
+        Uy_analytic(I+int_j) =  cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*sin(theta)))* exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta)))))
+     enddo
+
+  enddo
+
+  SELECT CASE(Order)
+  CASE(2)
+     !!Calcul de l'onde p en ajoutant les ddl de l'ordre 2
+
+     Do J=1,Nflu+Nflusol
+
+        Node = Tri(J,:)
+
+        !!Computation of vectors V12,V23 and V31
+
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+
+        I=(J-1)*Nphi+PhiEdge(3,2)
+        coor_x=Coor(Tri(J,1),1)+V12(1)/Order
+        coor_y=Coor(Tri(J,1),2)+V12(2)/Order
+        P_analytic(I) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))
+
+        I=(J-1)*Nphi+PhiEdge(1,2)
+        coor_x=Coor(Tri(J,2),1)+V23(1)/Order
+        coor_y=Coor(Tri(J,2),2)+V23(2)/Order
+        P_analytic(I) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0))))) 
+
+        I=(J-1)*Nphi+PhiEdge(2,2)
+        coor_x=Coor(Tri(J,3),1)+V31(1)/Order
+        coor_y=Coor(Tri(J,3),2)+V31(2)/Order
+        P_analytic(I) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))
+
+     enddo
+
+     !!Calcul de u = grad(psi) avec l'onde plane psi (ordre 2)
+
+     Do J=Nflu+Nflusol+1,Nflu+Nflusol+Nsolflu+Nsol
+
+        theta=0.Q0
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(3,2)
+        coor_x=Coor(Tri(J,1),1)+V12(1)/Order
+        coor_y=Coor(Tri(J,1),2)+V12(2)/Order
+        Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+        Uy_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(1,2)
+        coor_x=Coor(Tri(J,2),1)+V23(1)/Order
+        coor_y=Coor(Tri(J,2),2)+V23(2)/Order
+        Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+        Uy_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(2,2)
+        coor_x=Coor(Tri(J,3),1)+V31(1)/Order
+        coor_y=Coor(Tri(J,3),2)+V31(2)/Order
+        Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+        Uy_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+     enddo
+
+  CASE(3)
+
+     !!Calcul de l'onde p en ajoutant les ddl de l'ordre 3 supplémentaires à l'ordre 1
+
+     Do J=1,Nflu+Nflusol
+
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+        DO KK=1,Order-1
+           coor_x=Coor(Tri(J,1),1)+KK*V12(1)/Order
+           coor_y=Coor(Tri(J,1),2)+KK*V12(2)/Order
+           P_analytic((J-1)*Nphi+PhiEdge(3,KK+1)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+                &coor_x*cos(theta0)+&
+                &coor_y*sin(theta0)))))        
+        ENDDO
+
+
+        DO KK=1,Order-1
+           coor_x=Coor(Tri(J,2),1)+KK*V23(1)/Order
+           coor_y=Coor(Tri(J,2),2)+KK*V23(2)/Order
+           P_analytic((J-1)*Nphi+PhiEdge(1,KK+1)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+                &coor_x*cos(theta0)+&
+                &coor_y*sin(theta0)))))   
+        ENDDO
+
+        DO KK=1,Order-1
+           coor_x=Coor(Tri(J,3),1)+KK*V31(1)/Order
+           coor_y=Coor(Tri(J,3),2)+KK*V31(2)/Order
+           P_analytic((J-1)*Nphi+PhiEdge(2,KK+1)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+                &coor_x*cos(theta0)+&
+                &coor_y*sin(theta0)))))
+        ENDDO
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/3.-V31(1)/3.
+        coor_y=Coor(Tri(J,1),2)+V12(2)/3.-V31(2)/3.
+        P_analytic((J-1)*Nphi+Nphi) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))   
+     enddo
+
+     !!Calcul de u = grad(psi) avec l'onde plane psi (ordre 2)
+
+     Do J=Nflu+Nflusol+1,Nflu+Nflusol+Nsolflu+Nsol
+
+        theta=0.Q0
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+
+        DO KK=1,Order-1
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(3,KK+1)
+           coor_x=Coor(Tri(J,1),1)+KK*V12(1)/Order
+           coor_y=Coor(Tri(J,1),2)+KK*V12(2)/Order
+           Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+           Uy_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+        ENDDO
+
+        DO KK=1,Order-1
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(1,KK+1)
+           coor_x=Coor(Tri(J,2),1)+KK*V23(1)/Order
+           coor_y=Coor(Tri(J,2),2)+KK*V23(2)/Order
+           Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+           Uy_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+        ENDDO
+
+        DO KK=1,Order-1
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(2,KK+1)
+           coor_x=Coor(Tri(J,3),1)+KK*V31(1)/Order
+           coor_y=Coor(Tri(J,3),2)+KK*V31(2)/Order
+           Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+           Uy_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+        ENDDO
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+Nphi
+        coor_x=Coor(Tri(J,1),1)+V12(1)/3.-V31(1)/3.
+        coor_y=Coor(Tri(J,1),2)+V12(2)/3.-V31(2)/3.
+
+        Ux_analytic(I) =  cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*cos(theta)))* exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta)))))
+        Uy_analytic(I) =  cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*sin(theta)))* exp(+cmplx(0,(omega/sqrt(Cij(1,1,1)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta)))))
+
+     enddo
+  ENDSELECT
+end subroutine sub_solution_ondeplane_exact_grad_courbe
+
+subroutine sub_solution_ondeplane_exact_rot_courbe(theta0,R0)
+  Use m_condbord    
+  Use m_mat
+  Use m_gen
+  Use m_mesh
+  implicit none 
+  real*8,dimension(:),allocatable :: vectJ
+  complex*16, dimension(:), allocatable ::Valsourcebord
+  complex*16, dimension(:,:), allocatable ::Gradvalsourcebord
+  complex*16 :: GradPhiIG(2)
+  real*8 :: V12(2),V23(2),V31(2),Jfinv(2,2),thetai(2),norm(3,2),h2,hmin,coor_x,coor_y,theta
+  real*8 :: coorx1,coorx2,coory1,coory2,cmax,R0
+  integer :: Node(3),I,int_j,J,l,NsommeNum,K,NCALC,Ineigh,PhiEdge(3,1+Order),Nsomme,KK
+
+
+  real*8 :: demi_grand_axe_a,demi_petit_axe_b,h1,ksi,theta0,foc,pi
+
+  REAL*8 :: Phi(1+Order,NGL1D),coord_points(4)
+
+  REAL*8:: GradPhi1D(3,Nphi,2,NGL1D),d
+  real*8 :: theta1,theta2,dtheta
+  pi=2.Q0*asin(1.Q0)
+  SELECT CASE(Order)
+  CASE(1)
+     !On edge 1 (23)
+     CALL GradPhiOrder1(1-PtGL1D,PtGL1D,NGL1D,GradPhi1D(1,:,:,:))
+     !On edge 2 (31)
+     CALL GradPhiOrder1(0*PtGL1D,1-PtGL1D,NGL1D,GradPhi1D(2,:,:,:))
+     !On edge 3 (12)
+     CALL GradPhiOrder1(PtGL1D,0*PtGL1D,NGL1D,GradPhi1D(3,:,:,:))
+     CALL Phi1DOrder1(PtGL1D,NGL1D,Phi)
+
+     !Functions on Edge 23
+     PhiEdge(1,1)=2
+     PhiEdge(1,2)=3
+     !Functions on Edge 31
+     PhiEdge(2,1)=3
+     PhiEdge(2,2)=1
+     !Functions on Edge 12
+     PhiEdge(3,1)=1
+     PhiEdge(3,2)=2
+  CASE(2)
+     !On edge 1 (23)
+     CALL GradPhiOrder2(1.-PtGL1D,PtGL1D,NGL1D,GradPhi1D(1,:,:,:))
+     !On edge 2 (31)
+     CALL GradPhiOrder2(0.*PtGL1D,1.-PtGL1D,NGL1D,GradPhi1D(2,:,:,:))
+     !On edge 3 (12)
+     CALL GradPhiOrder2(PtGL1D,0.*PtGL1D,NGL1D,GradPhi1D(3,:,:,:))
+     CALL Phi1DOrder2(PtGL1D,NGL1D,Phi)
+     !Functions on Edge 23
+     PhiEdge(1,1)=2
+     PhiEdge(1,2)=5
+     PhiEdge(1,3)=3
+     !Functions on Edge 31
+     PhiEdge(2,1)=3
+     PhiEdge(2,2)=6
+     PhiEdge(2,3)=1
+     !Functions on Edge 12
+     PhiEdge(3,1)=1
+     PhiEdge(3,2)=4
+     PhiEdge(3,3)=2
+  CASE(3)
+     !On edge 1 (23)
+     CALL GradPhiOrder3(1.-PtGL1D,PtGL1D,NGL1D,GradPhi1D(1,:,:,:))
+     !On edge 2 (31)
+     CALL GradPhiOrder3(0.*PtGL1D,1.-PtGL1D,NGL1D,GradPhi1D(2,:,:,:))
+     !On edge 1 (12)
+     CALL GradPhiOrder3(PtGL1D,0.*PtGL1D,NGL1D,GradPhi1D(3,:,:,:))
+     CALL Phi1DOrder3(PtGL1D,NGL1D,Phi)
+     !Functions on Edge 23
+     PhiEdge(1,1)=2
+     PhiEdge(1,2)=6
+     PhiEdge(1,3)=7
+     PhiEdge(1,4)=3
+     !Functions on Edge 31
+     PhiEdge(2,1)=3
+     PhiEdge(2,2)=8
+     PhiEdge(2,3)=9
+     PhiEdge(2,4)=1
+     !Functions on Edge 12
+     PhiEdge(3,1)=1
+     PhiEdge(3,2)=4
+     PhiEdge(3,3)=5
+     PhiEdge(3,4)=2
+  END SELECT
+
+
+  L=Nflu+Nflusol+1
+  !!Calcul de l'onde plane p aux ddl d'ordre 1
+
+  Do J=1,Nflu+Nflusol
+
+     DO int_j=1,3
+        coor_x = Coor(Tri(J,int_j),1)
+        coor_y = Coor(Tri(J,int_j),2)
+        P_analytic((J-1)*Nphi+int_j) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))
+     enddo
+
+  enddo
+
+  !!Calcul de u = rot(psi) avec l'onde plane psi (ordre 1)
+
+  Do J=Nflu+Nflusol+1,Nflu+Nflusol+Nsolflu+Nsol
+     theta=0.Q0
+
+     Node = Tri(J,:)
+     I=((J-1)-Nflu-Nflusol)*Nphi
+     DO int_j=1,3
+
+        coor_x = Coor(Tri(J,int_j),1)
+        coor_y = Coor(Tri(J,int_j),2)
+
+        Ux_analytic(I+int_j) =  cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*sin(theta)))* exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta)))))
+        Uy_analytic(I+int_j) =  -cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*cos(theta)))* exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta)))))
+     enddo
+
+  enddo
+
+  SELECT CASE(Order)
+  CASE(2)
+     !!Calcul de l'onde p en ajoutant les ddl de l'ordre 2
+
+     Do J=1,Nflu+Nflusol
+
+        Node = Tri(J,:)
+
+        !!Computation of vectors V12,V23 and V31
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/Order
+        coor_y=Coor(Tri(J,1),2)+V12(2)/Order
+
+        P_analytic((J-1)*Nphi+PhiEdge(3,2)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))
+
+        coor_x=Coor(Tri(J,2),1)+V23(1)/Order
+        coor_y=Coor(Tri(J,2),2)+V23(2)/Order
+
+        P_analytic((J-1)*Nphi+PhiEdge(1,2)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))
+
+        coor_x=Coor(Tri(J,3),1)+V31(1)/Order
+        coor_y=Coor(Tri(J,3),2)+V31(2)/Order
+
+        P_analytic((J-1)*Nphi+PhiEdge(2,2)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))
+
+     enddo
+
+     !!Calcul de u = rot(psi) avec l'onde plane psi (ordre 2)
+   
+     Do J=Nflu+Nflusol+1,Nflu+Nflusol+Nsolflu+Nsol
+
+        theta=0.Q0
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(3,2)
+        coor_x=Coor(Tri(J,1),1)+V12(1)/Order
+        coor_y=Coor(Tri(J,1),2)+V12(2)/Order
+        Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+        Uy_analytic(I) = -cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(1,2)
+        coor_x=Coor(Tri(J,2),1)+V23(1)/Order
+        coor_y=Coor(Tri(J,2),2)+V23(2)/Order
+        Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+        Uy_analytic(I) = -cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(2,2)
+        coor_x=Coor(Tri(J,3),1)+V31(1)/Order
+        coor_y=Coor(Tri(J,3),2)+V31(2)/Order
+        Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+        Uy_analytic(I) = -cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta))))) 
+     enddo
+
+  CASE(3)
+
+     !!Calcul de l'onde p en ajoutant les ddl de l'ordre 3 supplémentaires à l'ordre 1
+
+     Do J=1,Nflu+Nflusol
+
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+        if(neigh(J,3).gt.nflu+nflusol) then 
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta1)
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if(neigh(J,3).le.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,1),1)+KK*V12(1)/Order
+           coor_y=Coor(Tri(J,1),2)+KK*V12(2)/Order
+           else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           P_analytic((J-1)*Nphi+PhiEdge(3,KK+1)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+                &coor_x*cos(theta0)+&
+                &coor_y*sin(theta0)))))        
+        ENDDO
+        if(neigh(J,1).gt.nflu+nflusol) then 
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta1)
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+
+        DO KK=1,Order-1
+           if(neigh(J,1).le.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,2),1)+KK*V23(1)/Order
+           coor_y=Coor(Tri(J,2),2)+KK*V23(2)/Order
+          else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           P_analytic((J-1)*Nphi+PhiEdge(1,KK+1)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+                &coor_x*cos(theta0)+&
+                &coor_y*sin(theta0)))))   
+        ENDDO
+        if(neigh(J,2).gt.nflu+nflusol) then 
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta1)
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if(neigh(J,2).le.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,3),1)+KK*V31(1)/Order
+           coor_y=Coor(Tri(J,3),2)+KK*V31(2)/Order
+        else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+        end if
+           P_analytic((J-1)*Nphi+PhiEdge(2,KK+1)) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+                &coor_x*cos(theta0)+&
+                &coor_y*sin(theta0)))))
+        ENDDO
+
+        coor_x=Coor(Tri(J,1),1)+V12(1)/3.-V31(1)/3.
+        coor_y=Coor(Tri(J,1),2)+V12(2)/3.-V31(2)/3.
+        P_analytic((J-1)*Nphi+Nphi) = exp(+cmplx(0,(omega/sqrt(mu(1)/rho(1))*(&
+             &coor_x*cos(theta0)+&
+             &coor_y*sin(theta0)))))   
+     enddo
+
+     !!Calcul de u = rot(psi) avec l'onde plane psi (ordre 3)
+
+     Do J=Nflu+Nflusol+1,Nflu+Nflusol+Nsolflu+Nsol
+
+        theta=0.Q0
+        Node = Tri(J,:)
+        V12(1)=Coor(Node(2),1)-Coor(Node(1),1)
+        V12(2)=Coor(Node(2),2)-Coor(Node(1),2)
+        V23(1)=Coor(Node(3),1)-Coor(Node(2),1)
+        V23(2)=Coor(Node(3),2)-Coor(Node(2),2)
+        V31(1)=Coor(Node(1),1)-Coor(Node(3),1)
+        V31(2)=Coor(Node(1),2)-Coor(Node(3),2)
+        if(neigh(J,3).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta1)
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+
+        DO KK=1,Order-1
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(3,KK+1)
+           if(neigh(J,3).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,1),1)+KK*V12(1)/Order
+           coor_y=Coor(Tri(J,1),2)+KK*V12(2)/Order
+           else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+           Uy_analytic(I) = -cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+        ENDDO
+       if(neigh(J,1).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(2),1), coor(Node(2),2),theta1)
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+          if(neigh(J,1).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,2),1)+KK*V23(1)/Order
+           coor_y=Coor(Tri(J,2),2)+KK*V23(2)/Order
+          else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+           end if
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(1,KK+1)
+           Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+           Uy_analytic(I) = -cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+        ENDDO
+        if(neigh(J,2).le.nflu+nflusol) then 
+           call calc_theta(coor(Node(3),1), coor(Node(3),2),theta1)
+           call calc_theta(coor(Node(1),1), coor(Node(1),2),theta2)
+           dtheta=theta2-theta1
+           if (dtheta.gt.pi) then
+              dtheta=dtheta-2*pi
+         elseif (dtheta.lt.-pi) then
+            dtheta=dtheta+2*pi
+         end if
+      end if
+        DO KK=1,Order-1
+           if(neigh(J,2).gt.nflu+nflusol) then 
+           coor_x=Coor(Tri(J,3),1)+KK*V31(1)/Order
+           coor_y=Coor(Tri(J,3),2)+KK*V31(2)/Order
+        else
+              coor_x=R0*cos(theta1+kk*dtheta/real(order,16))
+              coor_y=R0*sin(theta1+kk*dtheta/real(order,16))
+        end if
+           I=((J-1)-Nflu-Nflusol)*Nphi+PhiEdge(2,KK+1)
+           Ux_analytic(I) = cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*sin(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+           Uy_analytic(I) = -cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*cos(theta)))*exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+                &coor_x*cos(theta)+&
+                &coor_y*sin(theta))))) 
+        ENDDO
+
+        I=((J-1)-Nflu-Nflusol)*Nphi+Nphi
+        coor_x=Coor(Tri(J,1),1)+V12(1)/3.-V31(1)/3.
+        coor_y=Coor(Tri(J,1),2)+V12(2)/3.-V31(2)/3.
+
+        Ux_analytic(I) =  cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*sin(theta)))* exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta)))))
+        Uy_analytic(I) =  -cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*cos(theta)))* exp(+cmplx(0,(omega/sqrt(Cij(1,3,3)/rho(L))*(&
+             &coor_x*cos(theta)+&
+             &coor_y*sin(theta)))))
+
+     enddo
+  ENDSELECT
+end subroutine sub_solution_ondeplane_exact_rot_courbe
